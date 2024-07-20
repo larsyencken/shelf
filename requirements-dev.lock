@@ -29,7 +29,6 @@ pluggy==1.5.0
 pyright==1.1.372
     # via shelf
 pytest==8.3.1
-    # via shelf
 python-dateutil==2.9.0.post0
     # via botocore
 python-dotenv==1.0.1
