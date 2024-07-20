@@ -15,11 +15,9 @@ To shelve a data file by adding it in a content-addressable way to the S3-compat
 from shelf import shelve_data_file
 
 file_path = 'path/to/your/datafile.csv'
-namespace = 'your_namespace'
-dataset = 'your_dataset'
-version = 'v1'
+path = 'your_namespace/your_dataset/your_version'
 
-shelve_data_file(file_path, namespace, dataset, version)
+shelve_data_file(file_path, path)
 ```
 
 This will:
@@ -38,13 +36,13 @@ You can also use the `shelve` command from the command line to shelve a data fil
 2. Run the `shelve` command with the appropriate arguments:
 
 ```sh
-shelve path/to/your/datafile.csv your_namespace your_dataset
+shelve path/to/your/datafile.csv your_namespace/your_dataset
 ```
 
 or
 
 ```sh
-shelve path/to/your/datafile.csv your_namespace your_dataset your_version
+shelve path/to/your/datafile.csv your_namespace/your_dataset/your_version
 ```
 
 This will:

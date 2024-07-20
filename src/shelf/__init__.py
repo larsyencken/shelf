@@ -9,9 +9,15 @@ import shutil
 
 load_dotenv()
 
-def shelve_data_file(file_path: str, namespace: str, dataset: str, version: str = None) -> None:
-    if version is None:
+def shelve_data_file(file_path: str, path: str) -> None:
+    parts = path.split('/')
+    if len(parts) == 2:
+        namespace, dataset = parts
         version = datetime.today().strftime('%Y-%m-%d')
+    elif len(parts) == 3:
+        namespace, dataset, version = parts
+    else:
+        raise ValueError("Path must be in the format 'namespace/dataset' or 'namespace/dataset/version'")
 
     # Generate checksum for the file
     checksum = generate_checksum(file_path)
@@ -63,12 +69,10 @@ def copy_to_data_dir(file_path: str, namespace: str, dataset: str, version: str)
 def main():
     parser = argparse.ArgumentParser(description='Shelve a data file by adding it in a content-addressable way to the S3-compatible store.')
     parser.add_argument('file_path', type=str, help='Path to the data file')
-    parser.add_argument('namespace', type=str, help='Namespace for the data file')
-    parser.add_argument('dataset', type=str, help='Dataset for the data file')
-    parser.add_argument('version', type=str, nargs='?', help='Version of the data file (optional, defaults to today\'s date)')
+    parser.add_argument('path', type=str, help='Path in the format namespace/dataset or namespace/dataset/version')
     args = parser.parse_args()
 
-    shelve_data_file(args.file_path, args.namespace, args.dataset, args.version)
+    shelve_data_file(args.file_path, args.path)
 
 if __name__ == '__main__':
     main()
