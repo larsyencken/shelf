@@ -22,3 +22,6 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/shelf"]
+
+[tool.poetry.scripts]
+shelve = "shelf:main"
