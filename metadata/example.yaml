@@ -1,0 +1,4 @@
+namespace: example_namespace
+dataset: example_dataset
+version: example_version
+checksum: example_checksum
