@@ -17,7 +17,7 @@ help:
 # Run unittests with pytest
 unittest: .venv
 	@echo "==> Running unit tests"
-	@pytest
+	@rye test
 
 # Reformat using rye
 format: .venv
@@ -32,7 +32,7 @@ lint: .venv
 # Typecheck with pyright
 typecheck: .venv
 	@echo "==> Typechecking"
-	@pyright
+	@rye run pyright
 
 # Run lint, typecheck, and unittest sequentially
 test: lint typecheck unittest
