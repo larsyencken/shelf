@@ -24,6 +24,7 @@ This will:
 - Generate a checksum for the file.
 - Upload the file to the S3-compatible store using the checksum as the key.
 - Create a metadata record in the `metadata` directory with the checksum and other details.
+- Open the metadata file in an interactive editor for editing.
 
 ## Command Line Usage
 
@@ -49,4 +50,6 @@ This will:
 - Generate a checksum for the file.
 - Upload the file to the S3-compatible store using the checksum as the key.
 - Create a metadata record in the `metadata` directory with the checksum and other details.
+- Print a message indicating the file is being shelved.
+- Open the metadata file in an interactive editor for editing.
 - Copy the file to the `data` directory with the same structure as the metadata directory, keeping its original extension.
