@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import argparse
 from datetime import datetime
 import shutil
+import subprocess
 
 load_dotenv()
 
@@ -35,7 +36,10 @@ def shelve_data_file(file_path: str, path: str) -> None:
     }
 
     # Save metadata record to YAML file
-    save_metadata(metadata, namespace, dataset, version)
+    metadata_file = save_metadata(metadata, namespace, dataset, version)
+
+    # Open metadata file in interactive editor
+    open_in_editor(metadata_file)
 
     # Copy file to data directory
     copy_to_data_dir(file_path, namespace, dataset, version)
@@ -48,16 +52,27 @@ def generate_checksum(file_path: str) -> str:
     return sha256.hexdigest()
 
 def upload_to_s3(file_path: str, checksum: str) -> None:
-    s3 = boto3.client('s3')
+    s3 = boto3.client(
+        's3',
+        aws_access_key_id=os.getenv('B2_APPLICATION_KEY_ID'),
+        aws_secret_access_key=os.getenv('B2_APPLICATION_KEY'),
+        endpoint_url=os.getenv('B2_ENDPOINT_URL')
+    )
     bucket_name = os.getenv('B2_BUCKET_NAME')
+    print(f"Shelving {file_path} --> b2://{bucket_name}/{checksum}")
     s3.upload_file(file_path, bucket_name, checksum)
 
-def save_metadata(metadata: dict, namespace: str, dataset: str, version: str) -> None:
+def save_metadata(metadata: dict, namespace: str, dataset: str, version: str) -> str:
     metadata_dir = os.path.join('metadata', namespace, dataset)
     os.makedirs(metadata_dir, exist_ok=True)
     metadata_file = os.path.join(metadata_dir, f'{version}.yaml')
     with open(metadata_file, 'w') as f:
         yaml.dump(metadata, f)
+    return metadata_file
+
+def open_in_editor(file_path: str) -> None:
+    editor = os.getenv('EDITOR', 'vim')
+    subprocess.run([editor, file_path])
 
 def copy_to_data_dir(file_path: str, namespace: str, dataset: str, version: str) -> None:
     data_dir = os.path.join('data', namespace, dataset)
