@@ -11,23 +11,28 @@ help:
 
 # Check if .venv exists and is up to date
 .venv: pyproject.toml
-	rye sync
+	@echo "==> Installing packages"
+	@rye sync
 
 # Run unittests with pytest
 unittest: .venv
-	pytest
+	@echo "==> Running unit tests"
+	@pytest
 
 # Reformat using rye
 format: .venv
-	rye format
+	@echo "==> Formatting all files"
+	@rye format
 
 # Lint using rye
 lint: .venv
-	rye lint
+	@echo "==> Linting all files"
+	@rye lint
 
 # Typecheck with pyright
 typecheck: .venv
-	pyright
+	@echo "==> Typechecking"
+	@pyright
 
 # Run lint, typecheck, and unittest sequentially
 test: lint typecheck unittest
