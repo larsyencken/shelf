@@ -1,6 +1,0 @@
-checksum: ff0b52e4d4b596833d898f38c9ddc6936f5cc615fb6c6eee2505d9c931ccc522
-dataset: example
-extension: .csv
-namespace: example
-version: '2024-07-20'
-title: Test CSV file

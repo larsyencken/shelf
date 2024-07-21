@@ -1,93 +1,313 @@
-import os
+import argparse
 import hashlib
+import os
+import re
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, Union
+
 import boto3
 import yaml
 from dotenv import load_dotenv
-import argparse
-from datetime import datetime
-import shutil
-import subprocess
 
 load_dotenv()
 
-def shelve_data_file(file_path: str, path: str) -> None:
-    parts = path.split('/')
-    if len(parts) == 2:
-        namespace, dataset = parts
-        version = datetime.today().strftime('%Y-%m-%d')
-    elif len(parts) == 3:
-        namespace, dataset, version = parts
+
+BASE_DIR = Path(__file__).parent.parent.parent
+DATA_DIR = BASE_DIR / "data"
+METADATA_DIR = BASE_DIR / "metadata"
+
+BLACKLIST = [".DS_Store"]
+
+
+def add(file_path: Union[str, Path], path: str, edit=False) -> None:
+    file_path = Path(file_path)
+    namespace, dataset, version = _split_path(path)
+
+    print(f"Shelving: {file_path}")
+    print(f"  CREATE   metadata/{namespace}/{dataset}/{version}.json")
+    if file_path.is_dir():
+        metadata = add_directory_to_shelf(file_path, namespace, dataset, version)
     else:
-        raise ValueError("Path must be in the format 'namespace/dataset' or 'namespace/dataset/version'")
-
-    # Generate checksum for the file
-    checksum = generate_checksum(file_path)
-
-    # Upload file to S3-compatible store
-    upload_to_s3(file_path, checksum)
-
-    # Create metadata record
-    metadata = {
-        'namespace': namespace,
-        'dataset': dataset,
-        'version': version,
-        'checksum': checksum,
-        'extension': os.path.splitext(file_path)[1]
-    }
+        metadata = add_file_to_shelf(file_path, namespace, dataset, version)
 
     # Save metadata record to YAML file
     metadata_file = save_metadata(metadata, namespace, dataset, version)
 
     # Open metadata file in interactive editor
-    open_in_editor(metadata_file)
+    if edit and sys.stdout.isatty():
+        open_in_editor(metadata_file)
+
+
+def add_directory_to_shelf(
+    file_path: Path, namespace: str, dataset: str, version: str
+) -> dict:
+    # copy directory to data/
+    data_path = DATA_DIR / namespace / dataset / version
+    data_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"  COPY     {file_path}/ --> {data_path.relative_to(BASE_DIR)}/")
+    shutil.copytree(file_path, data_path)
+
+    # shelve directory contents
+    checksums = add_directory_to_s3(data_path)
+
+    # Save manifest file
+    manifest_file = data_path / "MANIFEST.yaml"
+    with open(manifest_file, "w") as f:
+        yaml.dump(checksums, f)
+
+    # Upload manifest file to S3
+    manifest_checksum = generate_checksum(manifest_file)
+    add_to_s3(manifest_file, manifest_checksum)
+
+    # Create metadata record
+    metadata = {
+        "namespace": namespace,
+        "dataset": dataset,
+        "version": version,
+        "type": "directory",
+        "manifest": manifest_checksum,
+    }
+
+    # Save metadata record to YAML file
+    save_metadata(metadata, namespace, dataset, version)
+
+    return metadata
+
+
+def add_directory_to_s3(file_path):
+    checksums = []
+    for root, dirs, files in os.walk(file_path):
+        for file in files:
+            if file in BLACKLIST:
+                continue
+
+            file_full_path = os.path.join(root, file)
+            checksum = generate_checksum(file_full_path)
+            add_to_s3(file_full_path, checksum)
+            checksums.append(
+                {
+                    "path": os.path.relpath(file_full_path, file_path),
+                    "checksum": checksum,
+                }
+            )
+
+    return sorted(checksums, key=lambda x: x["path"])
+
+
+def add_file_to_shelf(file_path: Path, namespace: str, dataset: str, version: str) -> dict:
+    # Generate checksum for the file
+    checksum = generate_checksum(file_path)
+
+    # Upload file to S3-compatible store
+    add_to_s3(file_path, checksum)
 
     # Copy file to data directory
     copy_to_data_dir(file_path, namespace, dataset, version)
 
-def generate_checksum(file_path: str) -> str:
+    # Create metadata record
+    metadata = {
+        "namespace": namespace,
+        "dataset": dataset,
+        "version": version,
+        "checksum": checksum,
+        "extension": os.path.splitext(file_path)[1],
+    }
+    return metadata
+
+
+def generate_checksum(file_path: Union[str, Path]) -> str:
     sha256 = hashlib.sha256()
-    with open(file_path, 'rb') as f:
-        for block in iter(lambda: f.read(4096), b''):
+
+    with open(file_path, "rb") as f:
+        for block in iter(lambda: f.read(4096), b""):
             sha256.update(block)
+
     return sha256.hexdigest()
 
-def upload_to_s3(file_path: str, checksum: str) -> None:
+
+def add_to_s3(file_path: Union[str, Path], checksum: str) -> None:
     s3 = boto3.client(
-        's3',
-        aws_access_key_id=os.getenv('B2_APPLICATION_KEY_ID'),
-        aws_secret_access_key=os.getenv('B2_APPLICATION_KEY'),
-        endpoint_url=os.getenv('B2_ENDPOINT_URL')
+        "s3",
+        aws_access_key_id=os.getenv("S3_ACCESS_KEY"),
+        aws_secret_access_key=os.getenv("S3_SECRET_KEY"),
+        endpoint_url=os.getenv("S3_ENDPOINT_URL"),
     )
-    bucket_name = os.getenv('B2_BUCKET_NAME')
-    print(f"Shelving {file_path} --> b2://{bucket_name}/{checksum}")
-    s3.upload_file(file_path, bucket_name, checksum)
+    bucket_name = os.getenv("S3_BUCKET_NAME")
+    dest_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
+    print(f"  UPLOAD   {file_path} --> s3://{bucket_name}/{dest_path}")
+    s3.upload_file(file_path, bucket_name, str(dest_path))
+
 
 def save_metadata(metadata: dict, namespace: str, dataset: str, version: str) -> str:
-    metadata_dir = os.path.join('metadata', namespace, dataset)
+    metadata_dir = os.path.join("metadata", namespace, dataset)
     os.makedirs(metadata_dir, exist_ok=True)
-    metadata_file = os.path.join(metadata_dir, f'{version}.yaml')
-    with open(metadata_file, 'w') as f:
+    metadata_file = os.path.join(metadata_dir, f"{version}.yaml")
+    with open(metadata_file, "w") as f:
         yaml.dump(metadata, f)
     return metadata_file
 
+
 def open_in_editor(file_path: str) -> None:
-    editor = os.getenv('EDITOR', 'vim')
+    editor = os.getenv("EDITOR", "vim")
     subprocess.run([editor, file_path])
 
-def copy_to_data_dir(file_path: str, namespace: str, dataset: str, version: str) -> None:
-    data_dir = os.path.join('data', namespace, dataset)
-    os.makedirs(data_dir, exist_ok=True)
-    file_extension = os.path.splitext(file_path)[1]
-    data_file = os.path.join(data_dir, f'{version}{file_extension}')
+
+def copy_to_data_dir(
+    file_path: Path, namespace: str, dataset: str, version: str
+) -> None:
+    data_dir = DATA_DIR / namespace / dataset
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    assert not Path(file_path).is_dir()
+
+    data_file = os.path.join(data_dir, f"{version}{file_path.suffix}")
     shutil.copy2(file_path, data_file)
+    print(
+        f"  COPY     {file_path} --> data/{namespace}/{dataset}/{version}{file_path.suffix}"
+    )
+
+
+def get(path: Optional[str] = None) -> None:
+    datasets = walk_metadata_files()
+    if path:
+        regex = re.compile(path)
+        datasets = [d for d in datasets if regex.search(str(d))]
+
+    if not datasets:
+        raise KeyError(f"No datasets found for path: {path}")
+
+    for metadata_file in datasets:
+        restore_dataset(metadata_file)
+
+
+def walk_metadata_files() -> list[Path]:
+    return [
+        Path(root) / file
+        for root, _, files in os.walk("metadata")
+        for file in files
+        if file.endswith('.yaml')
+    ]
+
+
+def restore_dataset(metadata_file: Path) -> None:
+    with open(metadata_file, "r") as f:
+        metadata = yaml.safe_load(f)
+
+    namespace = metadata["namespace"]
+    dataset = metadata["dataset"]
+    version = metadata["version"]
+
+    print(f"Restoring: {namespace}/{dataset}/{version}")
+
+    data_dir = DATA_DIR / namespace / dataset
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    if metadata.get("type") == "directory":
+        restore_directory(metadata, data_dir, version)
+    else:
+        restore_file(metadata, data_dir, version)
+
+
+def restore_file(metadata: dict, data_dir: Path, version: str) -> None:
+    file_extension = metadata["extension"]
+    dest_file = (data_dir / version).with_suffix(file_extension)
+    fetch_from_s3(metadata["checksum"], dest_file)
+
+
+def restore_directory(metadata: dict, data_dir: Path, version: str):
+    # make the parent directory
+    dest_dir = data_dir / version
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # fetch the manifest into it
+    manifest_file = dest_dir / "MANIFEST.yaml"
+    fetch_from_s3(metadata["manifest"], manifest_file)
+
+    # load its records
+    with open(manifest_file, "r") as f:
+        manifest = yaml.safe_load(f)
+
+    # fetch each file it mentions
+    for item in manifest:
+        file_path = data_dir / version / item['path']
+        
+        # let's not shoot ourselves in the foot and go writing anywhere in the filesystem
+        if not file_path.resolve().is_relative_to(dest_dir.resolve()):
+            raise Exception(f'manifest contains path {item['path']} outside the destination directory {dest_dir}')
+
+        fetch_from_s3(item["checksum"], file_path)
+
+
+def fetch_from_s3(checksum: str, dest_path: Path) -> None:
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=os.getenv("S3_ACCESS_KEY"),
+        aws_secret_access_key=os.getenv("S3_SECRET_KEY"),
+        endpoint_url=os.getenv("S3_ENDPOINT_URL"),
+    )
+    bucket_name = os.getenv("S3_BUCKET_NAME")
+    assert bucket_name
+    s3_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
+    print(f"  FETCH    s3://{bucket_name}/{s3_path} --> {dest_path.resolve().relative_to(BASE_DIR)}")
+    s3.download_file(bucket_name, s3_path, str(dest_path))
+
 
 def main():
-    parser = argparse.ArgumentParser(description='Shelve a data file by adding it in a content-addressable way to the S3-compatible store.')
-    parser.add_argument('file_path', type=str, help='Path to the data file')
-    parser.add_argument('path', type=str, help='Path in the format namespace/dataset or namespace/dataset/version')
+    parser = argparse.ArgumentParser(
+        description="Shelf a data file or directory by adding it in a content-addressable way to the S3-compatible store."
+    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    add_parser = subparsers.add_parser(
+        "add", help="Add a data file or directory to the content store"
+    )
+    add_parser.add_argument(
+        "file_path", type=str, help="Path to the data file or directory"
+    )
+    add_parser.add_argument(
+        "path",
+        type=str,
+        help="Path in the format namespace/dataset or namespace/dataset/version",
+    )
+
+    get_parser = subparsers.add_parser(
+        "get", help="Fetch and unpack data from the content store"
+    )
+    get_parser.add_argument(
+        "path",
+        type=str,
+        nargs="?",
+        help="Optional regex to match against metadata path names",
+    )
+
     args = parser.parse_args()
 
-    shelve_data_file(args.file_path, args.path)
+    if args.command == "add":
+        return add(args.file_path, args.path)
 
-if __name__ == '__main__':
+    elif args.command == "get":
+        return get(args.path)
+
+    parser.print_help()
+
+
+def _split_path(path: str) -> tuple:
+    parts = path.split("/")
+    if len(parts) == 2:
+        namespace, dataset = parts
+        version = datetime.today().strftime("%Y-%m-%d")
+    elif len(parts) == 3:
+        namespace, dataset, version = parts
+    else:
+        raise ValueError(
+            "Path must be in the format 'namespace/dataset' or 'namespace/dataset/version'"
+        )
+    return namespace, dataset, version
+
+
+if __name__ == "__main__":
     main()

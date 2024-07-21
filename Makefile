@@ -23,6 +23,7 @@ unittest: .venv
 format: .venv
 	@echo "==> Formatting all files"
 	@rye format
+	@rye lint --fix
 
 # Lint using rye
 lint: .venv
@@ -36,3 +37,6 @@ typecheck: .venv
 
 # Run lint, typecheck, and unittest sequentially
 test: lint typecheck unittest
+
+clean:
+	rm -rf data/* metadata/*
