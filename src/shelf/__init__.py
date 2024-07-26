@@ -23,30 +23,30 @@ METADATA_DIR = BASE_DIR / "metadata"
 BLACKLIST = [".DS_Store"]
 
 
-def add(file_path: Union[str, Path], path: str, edit=False) -> None:
+def add(file_path: Union[str, Path], dataset_name: str, edit=False) -> str:
     file_path = Path(file_path)
-    namespace, dataset, version = _split_path(path)
+    dataset_name = _process_dataset_name(dataset_name)
 
     print(f"Shelving: {file_path}")
-    print(f"  CREATE   metadata/{namespace}/{dataset}/{version}.json")
+    print(f"  CREATE   metadata/{dataset_name}.json")
     if file_path.is_dir():
-        metadata = add_directory_to_shelf(file_path, namespace, dataset, version)
+        metadata = add_directory_to_shelf(file_path, dataset_name)
     else:
-        metadata = add_file_to_shelf(file_path, namespace, dataset, version)
+        metadata = add_file_to_shelf(file_path, dataset_name)
 
     # Save metadata record to YAML file
-    metadata_file = save_metadata(metadata, namespace, dataset, version)
+    metadata_file = save_metadata(metadata, dataset_name)
 
     # Open metadata file in interactive editor
     if edit and sys.stdout.isatty():
         open_in_editor(metadata_file)
 
+    return dataset_name
 
-def add_directory_to_shelf(
-    file_path: Path, namespace: str, dataset: str, version: str
-) -> dict:
+
+def add_directory_to_shelf(file_path: Path, dataset_name: str) -> dict:
     # copy directory to data/
-    data_path = DATA_DIR / namespace / dataset / version
+    data_path = DATA_DIR / dataset_name
     data_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"  COPY     {file_path}/ --> {data_path.relative_to(BASE_DIR)}/")
     shutil.copytree(file_path, data_path)
@@ -65,15 +65,13 @@ def add_directory_to_shelf(
 
     # Create metadata record
     metadata = {
-        "namespace": namespace,
-        "dataset": dataset,
-        "version": version,
+        "dataset_name": dataset_name,
         "type": "directory",
         "manifest": manifest_checksum,
     }
 
     # Save metadata record to YAML file
-    save_metadata(metadata, namespace, dataset, version)
+    save_metadata(metadata, dataset_name)
 
     return metadata
 
@@ -98,7 +96,7 @@ def add_directory_to_s3(file_path):
     return sorted(checksums, key=lambda x: x["path"])
 
 
-def add_file_to_shelf(file_path: Path, namespace: str, dataset: str, version: str) -> dict:
+def add_file_to_shelf(file_path: Path, dataset_name: str) -> dict:
     # Generate checksum for the file
     checksum = generate_checksum(file_path)
 
@@ -106,13 +104,11 @@ def add_file_to_shelf(file_path: Path, namespace: str, dataset: str, version: st
     add_to_s3(file_path, checksum)
 
     # Copy file to data directory
-    copy_to_data_dir(file_path, namespace, dataset, version)
+    copy_to_data_dir(file_path, dataset_name)
 
     # Create metadata record
     metadata = {
-        "namespace": namespace,
-        "dataset": dataset,
-        "version": version,
+        "dataset_name": dataset_name,
         "checksum": checksum,
         "extension": os.path.splitext(file_path)[1],
     }
@@ -142,33 +138,32 @@ def add_to_s3(file_path: Union[str, Path], checksum: str) -> None:
     s3.upload_file(file_path, bucket_name, str(dest_path))
 
 
-def save_metadata(metadata: dict, namespace: str, dataset: str, version: str) -> str:
-    metadata_dir = os.path.join("metadata", namespace, dataset)
-    os.makedirs(metadata_dir, exist_ok=True)
-    metadata_file = os.path.join(metadata_dir, f"{version}.yaml")
+def save_metadata(metadata: dict, dataset_name: str) -> Path:
+    metadata_dir = METADATA_DIR / dataset_name
+    metadata_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    metadata_file = metadata_dir.with_suffix(".yaml")
+
     with open(metadata_file, "w") as f:
         yaml.dump(metadata, f)
+
     return metadata_file
 
 
-def open_in_editor(file_path: str) -> None:
+def open_in_editor(file_path: Path) -> None:
     editor = os.getenv("EDITOR", "vim")
     subprocess.run([editor, file_path])
 
 
-def copy_to_data_dir(
-    file_path: Path, namespace: str, dataset: str, version: str
-) -> None:
-    data_dir = DATA_DIR / namespace / dataset
-    data_dir.mkdir(parents=True, exist_ok=True)
+def copy_to_data_dir(file_path: Path, dataset_name: str) -> None:
+    data_dir = DATA_DIR / dataset_name
+    data_dir.parent.mkdir(parents=True, exist_ok=True)
 
     assert not Path(file_path).is_dir()
 
-    data_file = os.path.join(data_dir, f"{version}{file_path.suffix}")
+    data_file = data_dir.with_suffix(file_path.suffix)
     shutil.copy2(file_path, data_file)
-    print(
-        f"  COPY     {file_path} --> data/{namespace}/{dataset}/{version}{file_path.suffix}"
-    )
+    print(f"  COPY     {file_path} --> {data_file}")
 
 
 def get(path: Optional[str] = None) -> None:
@@ -189,7 +184,7 @@ def walk_metadata_files() -> list[Path]:
         Path(root) / file
         for root, _, files in os.walk("metadata")
         for file in files
-        if file.endswith('.yaml')
+        if file.endswith(".yaml")
     ]
 
 
@@ -197,30 +192,28 @@ def restore_dataset(metadata_file: Path) -> None:
     with open(metadata_file, "r") as f:
         metadata = yaml.safe_load(f)
 
-    namespace = metadata["namespace"]
-    dataset = metadata["dataset"]
-    version = metadata["version"]
+    dataset_name = metadata["dataset_name"]
 
-    print(f"Restoring: {namespace}/{dataset}/{version}")
+    print(f"Restoring: {dataset_name}")
 
-    data_dir = DATA_DIR / namespace / dataset
-    data_dir.mkdir(parents=True, exist_ok=True)
+    data_dir = DATA_DIR / dataset_name
+    data_dir.parent.mkdir(parents=True, exist_ok=True)
 
     if metadata.get("type") == "directory":
-        restore_directory(metadata, data_dir, version)
+        restore_directory(metadata, data_dir)
     else:
-        restore_file(metadata, data_dir, version)
+        restore_file(metadata, data_dir)
 
 
-def restore_file(metadata: dict, data_dir: Path, version: str) -> None:
+def restore_file(metadata: dict, data_dir: Path) -> None:
     file_extension = metadata["extension"]
-    dest_file = (data_dir / version).with_suffix(file_extension)
+    dest_file = data_dir.with_suffix(file_extension)
     fetch_from_s3(metadata["checksum"], dest_file)
 
 
-def restore_directory(metadata: dict, data_dir: Path, version: str):
+def restore_directory(metadata: dict, data_dir: Path):
     # make the parent directory
-    dest_dir = data_dir / version
+    dest_dir = data_dir
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     # fetch the manifest into it
@@ -233,11 +226,13 @@ def restore_directory(metadata: dict, data_dir: Path, version: str):
 
     # fetch each file it mentions
     for item in manifest:
-        file_path = data_dir / version / item['path']
-        
+        file_path = data_dir / item["path"]
+
         # let's not shoot ourselves in the foot and go writing anywhere in the filesystem
         if not file_path.resolve().is_relative_to(dest_dir.resolve()):
-            raise Exception(f'manifest contains path {item['path']} outside the destination directory {dest_dir}')
+            raise Exception(
+                f'manifest contains path {item['path']} outside the destination directory {dest_dir}'
+            )
 
         fetch_from_s3(item["checksum"], file_path)
 
@@ -252,7 +247,9 @@ def fetch_from_s3(checksum: str, dest_path: Path) -> None:
     bucket_name = os.getenv("S3_BUCKET_NAME")
     assert bucket_name
     s3_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
-    print(f"  FETCH    s3://{bucket_name}/{s3_path} --> {dest_path.resolve().relative_to(BASE_DIR)}")
+    print(
+        f"  FETCH    s3://{bucket_name}/{s3_path} --> {dest_path.resolve().relative_to(BASE_DIR)}"
+    )
     s3.download_file(bucket_name, s3_path, str(dest_path))
 
 
@@ -269,9 +266,9 @@ def main():
         "file_path", type=str, help="Path to the data file or directory"
     )
     add_parser.add_argument(
-        "path",
+        "dataset_name",
         type=str,
-        help="Path in the format namespace/dataset or namespace/dataset/version",
+        help="Dataset name as a relative path of arbitrary size",
     )
 
     get_parser = subparsers.add_parser(
@@ -287,7 +284,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "add":
-        return add(args.file_path, args.path)
+        return add(args.file_path, args.dataset_name)
 
     elif args.command == "get":
         return get(args.path)
@@ -295,18 +292,24 @@ def main():
     parser.print_help()
 
 
-def _split_path(path: str) -> tuple:
-    parts = path.split("/")
-    if len(parts) == 2:
-        namespace, dataset = parts
-        version = datetime.today().strftime("%Y-%m-%d")
-    elif len(parts) == 3:
-        namespace, dataset, version = parts
-    else:
-        raise ValueError(
-            "Path must be in the format 'namespace/dataset' or 'namespace/dataset/version'"
-        )
-    return namespace, dataset, version
+def _process_dataset_name(dataset_name: str) -> str:
+    parts = dataset_name.split("/")
+
+    if _is_valid_version(parts[-1]):
+        if len(parts) == 1:
+            raise Exception("a dataset must have a name as well as a version")
+
+        # the final segment is a version, all good
+        return dataset_name
+
+    # add a version to the end
+    parts.append(datetime.today().strftime("%Y-%m-%d"))
+
+    return "/".join(parts)
+
+
+def _is_valid_version(version: str) -> bool:
+    return bool(re.match(r"\d{4}-\d{2}-\d{2}", version)) or version == "latest"
 
 
 if __name__ == "__main__":
