@@ -184,7 +184,7 @@ def walk_metadata_files() -> list[Path]:
         Path(root) / file
         for root, _, files in os.walk("metadata")
         for file in files
-        if file.endswith('.yaml')
+        if file.endswith(".yaml")
     ]
 
 
@@ -226,11 +226,13 @@ def restore_directory(metadata: dict, data_dir: Path):
 
     # fetch each file it mentions
     for item in manifest:
-        file_path = data_dir / item['path']
-        
+        file_path = data_dir / item["path"]
+
         # let's not shoot ourselves in the foot and go writing anywhere in the filesystem
         if not file_path.resolve().is_relative_to(dest_dir.resolve()):
-            raise Exception(f'manifest contains path {item['path']} outside the destination directory {dest_dir}')
+            raise Exception(
+                f'manifest contains path {item['path']} outside the destination directory {dest_dir}'
+            )
 
         fetch_from_s3(item["checksum"], file_path)
 
@@ -245,7 +247,9 @@ def fetch_from_s3(checksum: str, dest_path: Path) -> None:
     bucket_name = os.getenv("S3_BUCKET_NAME")
     assert bucket_name
     s3_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
-    print(f"  FETCH    s3://{bucket_name}/{s3_path} --> {dest_path.resolve().relative_to(BASE_DIR)}")
+    print(
+        f"  FETCH    s3://{bucket_name}/{s3_path} --> {dest_path.resolve().relative_to(BASE_DIR)}"
+    )
     s3.download_file(bucket_name, s3_path, str(dest_path))
 
 
@@ -290,10 +294,22 @@ def main():
 
 def _process_dataset_name(dataset_name: str) -> str:
     parts = dataset_name.split("/")
-    last_part = parts[-1]
-    if not re.match(r"\d{4}-\d{2}-\d{2}", last_part) and last_part != "latest":
-        parts.append(datetime.today().strftime("%Y-%m-%d"))
+
+    if _is_valid_version(parts[-1]):
+        if len(parts) == 1:
+            raise Exception("a dataset must have a name as well as a version")
+
+        # the final segment is a version, all good
+        return dataset_name
+
+    # add a version to the end
+    parts.append(datetime.today().strftime("%Y-%m-%d"))
+
     return "/".join(parts)
+
+
+def _is_valid_version(version: str) -> bool:
+    return bool(re.match(r"\d{4}-\d{2}-\d{2}", version)) or version == "latest"
 
 
 if __name__ == "__main__":
