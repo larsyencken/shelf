@@ -12,6 +12,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    services:
+      minio:
+        image: lazybit/minio
+        ports:
+          - 9000:9000
+        env:
+          MINIO_ACCESS_KEY: justtesting
+          MINIO_SECRET_KEY: justtesting
+        options: --name=minio --health-cmd "curl http://localhost:9000/minio/health/live"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -27,5 +37,26 @@ jobs:
       - name: Install dependencies
         run: make .venv
 
+      - name: Set up testing minio bucket
+        run: |
+          .venv/bin/python3 - <<'EOF'
+          from minio import Minio
+
+          minio = Minio(
+              'localhost:9000',
+              access_key='justtesting',
+              secret_key='justtesting',
+              secure=False
+          )
+
+          minio.make_bucket('test')
+          print(f'{minio.list_buckets()}')
+          EOF
+
       - name: Run tests
         run: make test
+        env:
+          B2_APPLICATION_KEY: justtesting
+          B2_APPLICATION_KEY_ID: justtesting
+          B2_BUCKET_NAME: test
+          B2_ENDPOINT_URL: http://localhost:9000/

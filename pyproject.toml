@@ -2,9 +2,7 @@
 name = "shelf"
 version = "0.1.0"
 description = "Add your description here"
-authors = [
-    { name = "Lars Yencken", email = "lars@yencken.org" }
-]
+authors = [{ name = "Lars Yencken", email = "lars@yencken.org" }]
 dependencies = [
     "boto3>=1.34.145",
     "pyyaml>=6.0.1",
@@ -15,7 +13,7 @@ readme = "README.md"
 requires-python = ">= 3.12"
 
 [project.scripts]
-shelve = "shelf:main"
+shelf = "shelf:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -23,9 +21,7 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = [
-    "pytest>=8.3.1",
-]
+dev-dependencies = ["pytest>=8.3.1", "minio>=7.2.7"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
