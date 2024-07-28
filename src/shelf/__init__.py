@@ -42,6 +42,9 @@ def add(file_path: Union[str, Path], dataset_name: str, edit=False) -> str:
     if edit and sys.stdout.isatty():
         open_in_editor(metadata_file)
 
+    # Append data path to .gitignore
+    append_to_gitignore(config, metadata, dataset_name)
+
     return dataset_name
 
 
@@ -111,6 +114,7 @@ def add_file_to_shelf(config, file_path: Path, dataset_name: str) -> dict:
 
     # Create metadata record
     metadata = {
+        "type": "file",
         "dataset_name": dataset_name,
         "checksum": checksum,
         "extension": os.path.splitext(file_path)[1],
@@ -401,5 +405,17 @@ def _load_schema() -> dict:
         return yaml.safe_load(istream)
 
 
-if __name__ == "__main__":
-    main()
+def append_to_gitignore(
+    config: "ShelfConfig", metadata: dict, dataset_name: str
+) -> None:
+    gitignore_path = config.config_file.parent / ".gitignore"
+    if not gitignore_path.exists():
+        print("  CREATE  .gitignore")
+
+    relative_data_path = f"data/{dataset_name}"
+    if metadata["type"] == "file":
+        relative_data_path += metadata["extension"]
+
+    with open(gitignore_path, "a") as f:
+        f.write(f"{relative_data_path}\n")
+    print(f"  APPEND   {relative_data_path} to .gitignore")

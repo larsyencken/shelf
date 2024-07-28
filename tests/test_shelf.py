@@ -40,10 +40,13 @@ def test_add_file(setup_test_environment):
     metadata_file = (
         tmp_path / "data" / "test_namespace" / "test_dataset" / "2024-07-26.meta.yaml"
     )
+    gitignore_file = tmp_path / ".gitignore"
 
     # make sure files are clear from previous runs
     data_file.unlink(missing_ok=True)
     metadata_file.unlink(missing_ok=True)
+    if gitignore_file.exists():
+        gitignore_file.unlink()
 
     # create dummy file
     new_file = tmp_path / "file1.txt"
@@ -56,6 +59,11 @@ def test_add_file(setup_test_environment):
     # check for data and metadata
     assert data_file.exists()
     assert metadata_file.exists()
+
+    # check if data path is added to .gitignore
+    assert gitignore_file.exists()
+    with open(gitignore_file, "r") as f:
+        assert f"{path}.txt\n" in f.read()
 
     # re-fectch it from shelf
     data_file.unlink()
@@ -71,11 +79,14 @@ def test_shelve_directory(setup_test_environment):
     path = "test_namespace/test_dataset/latest"
     data_path = tmp_path / "data" / path
     metadata_file = (tmp_path / "data" / path).with_suffix(".meta.yaml")
+    gitignore_file = tmp_path / ".gitignore"
 
     # clear from previous runs
     if data_path.exists():
         shutil.rmtree(data_path)
     metadata_file.unlink(missing_ok=True)
+    if gitignore_file.exists():
+        gitignore_file.unlink()
 
     # create dummy data
     parent = tmp_path / "example"
@@ -93,6 +104,11 @@ def test_shelve_directory(setup_test_environment):
     assert data_path.is_dir()
     assert metadata_file.exists()
     assert (data_path / "MANIFEST.yaml").exists()
+
+    # check if data path is added to .gitignore
+    assert gitignore_file.exists()
+    with open(gitignore_file, "r") as f:
+        assert f"{path}\n" in f.read()
 
     # clear the data
     shutil.rmtree(data_path)
