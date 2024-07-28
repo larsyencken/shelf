@@ -9,6 +9,8 @@ Shelf is a library and personal ETL framework for managing small data files and 
 Metadata is kept on-disk in a `data/` folder. Data is definitively stored in an S3-compatible store, but fetched locally for processing.
 
 ```mermaid
+graph LR
+
 subgraph git-repo
     metadata
 end
