@@ -316,8 +316,8 @@ class Shelf:
         def base_dir(self) -> Path:
             return self.config_file.parent / self.data_dir
 
-    def detect_shelf_config(self, config: Optional[Path] = None) -> "Shelf.ShelfConfig":
-        config_file, config = self._find_shelf_config(config)
+    def detect_shelf_config(self, config_file: Optional[Path] = None) -> "Shelf.ShelfConfig":
+        config_file, config = self._find_shelf_config(config_file)
         schema = self._load_schema()
         jsonschema.validate(config, schema)
         return self.ShelfConfig(config_file, **config)
