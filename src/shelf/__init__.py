@@ -417,5 +417,5 @@ def append_to_gitignore(
         relative_data_path += metadata["extension"]
 
     with open(gitignore_path, "a") as f:
-        f.write(f"\n{relative_data_path}\n")
+        f.write(f"{relative_data_path}\n")
     print(f"  APPEND   {relative_data_path} to .gitignore")
