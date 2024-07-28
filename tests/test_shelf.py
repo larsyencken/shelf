@@ -199,8 +199,8 @@ def test_list_datasets(setup_test_environment):
     add(str(new_file2), path2)
 
     # capture the output of list_datasets
-    from io import StringIO
     import sys
+    from io import StringIO
 
     captured_output = StringIO()
     sys.stdout = captured_output
@@ -209,8 +209,8 @@ def test_list_datasets(setup_test_environment):
 
     output = captured_output.getvalue().strip().split("\n")
     assert output == [
-        "test_namespace/test_dataset1/2024-07-26.meta.yaml",
-        "test_namespace/test_dataset2/2024-07-27.meta.yaml",
+        "test_namespace/test_dataset1/2024-07-26",
+        "test_namespace/test_dataset2/2024-07-27",
     ]
 
 
@@ -231,8 +231,8 @@ def test_list_datasets_with_regex(setup_test_environment):
     add(str(new_file2), path2)
 
     # capture the output of list_datasets with regex
-    from io import StringIO
     import sys
+    from io import StringIO
 
     captured_output = StringIO()
     sys.stdout = captured_output
@@ -240,4 +240,4 @@ def test_list_datasets_with_regex(setup_test_environment):
     sys.stdout = sys.__stdout__
 
     output = captured_output.getvalue().strip().split("\n")
-    assert output == ["test_namespace/test_dataset1/2024-07-26.meta.yaml"]
+    assert output == ["test_namespace/test_dataset1/2024-07-26"]

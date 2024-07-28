@@ -188,7 +188,7 @@ def walk_metadata_files(config: "ShelfConfig") -> list[Path]:
         Path(root) / file
         for root, _, files in os.walk(config.abs_data_dir)
         for file in files
-        if file.endswith(".yaml")
+        if file.endswith(".meta.yaml")
     ]
 
 
@@ -256,8 +256,11 @@ def fetch_from_s3(config, checksum: str, dest_path: Path) -> None:
 
 def list_datasets(regex: Optional[str] = None) -> None:
     config = detect_shelf_config()
-    datasets = walk_metadata_files(config)
-    dataset_names = [str(d.relative_to(config.abs_data_dir)) for d in datasets]
+    metadata_files = walk_metadata_files(config)
+    suffix = ".meta.yaml"
+    dataset_names = [
+        str(d.relative_to(config.abs_data_dir))[: -len(suffix)] for d in metadata_files
+    ]
 
     if regex:
         pattern = re.compile(regex)
@@ -385,12 +388,10 @@ def detect_shelf_config() -> ShelfConfig:
 
 
 def _find_shelf_config() -> tuple[Path, dict]:
-    current_dir = Path(".").resolve()
-    while current_dir != Path("/"):
-        config_file = current_dir / "shelf.yaml"
-        if config_file.exists():
-            with open(config_file, "r") as istream:
-                return config_file, yaml.safe_load(istream)
+    config_file = Path(".").resolve() / "shelf.yaml"
+    if config_file.exists():
+        with open(config_file, "r") as istream:
+            return config_file, yaml.safe_load(istream)
 
     raise Exception("No shelf.yaml file found -- have you run shelf init?")
 
