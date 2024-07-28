@@ -254,6 +254,19 @@ def fetch_from_s3(config, checksum: str, dest_path: Path) -> None:
     s3.download_file(bucket_name, s3_path, str(dest_path))
 
 
+def list_datasets(regex: Optional[str] = None) -> None:
+    config = detect_shelf_config()
+    datasets = walk_metadata_files(config)
+    dataset_names = [str(d.relative_to(config.abs_data_dir)) for d in datasets]
+
+    if regex:
+        pattern = re.compile(regex)
+        dataset_names = [name for name in dataset_names if pattern.search(name)]
+
+    for name in sorted(dataset_names):
+        print(name)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Shelf a data file or directory by adding it in a content-addressable way to the S3-compatible store."
@@ -282,6 +295,16 @@ def main():
         help="Optional regex to match against metadata path names",
     )
 
+    list_parser = subparsers.add_parser(
+        "list", help="List all datasets in alphabetical order"
+    )
+    list_parser.add_argument(
+        "regex",
+        type=str,
+        nargs="?",
+        help="Optional regex to filter dataset names",
+    )
+
     subparsers.add_parser(
         "init", help="Initialize the shelf with the necessary directories"
     )
@@ -293,6 +316,9 @@ def main():
 
     elif args.command == "get":
         return get(args.path)
+
+    elif args.command == "list":
+        return list_datasets(args.regex)
 
     elif args.command == "init":
         return init()

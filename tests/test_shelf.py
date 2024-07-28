@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from shelf import add, get, init  # noqa
+from shelf import add, get, init, list_datasets  # noqa
 
 BASE = Path(__file__).parent.parent
 
@@ -180,3 +180,64 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     assert (data_path / "file1.txt").exists()
     assert (data_path / "file2.txt").exists()
     assert (data_path / "MANIFEST.yaml").exists()
+
+
+def test_list_datasets(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    path1 = "test_namespace/test_dataset1/2024-07-26"
+    path2 = "test_namespace/test_dataset2/2024-07-27"
+    new_file1 = tmp_path / "file1.txt"
+    new_file2 = tmp_path / "file2.txt"
+    new_file1.write_text("Hello, World!")
+    new_file2.write_text("Hello, Cosmos!")
+
+    # add files to shelf
+    init(tmp_path)
+    add(str(new_file1), path1)
+    add(str(new_file2), path2)
+
+    # capture the output of list_datasets
+    from io import StringIO
+    import sys
+
+    captured_output = StringIO()
+    sys.stdout = captured_output
+    list_datasets()
+    sys.stdout = sys.__stdout__
+
+    output = captured_output.getvalue().strip().split("\n")
+    assert output == [
+        "test_namespace/test_dataset1/2024-07-26.meta.yaml",
+        "test_namespace/test_dataset2/2024-07-27.meta.yaml",
+    ]
+
+
+def test_list_datasets_with_regex(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    path1 = "test_namespace/test_dataset1/2024-07-26"
+    path2 = "test_namespace/test_dataset2/2024-07-27"
+    new_file1 = tmp_path / "file1.txt"
+    new_file2 = tmp_path / "file2.txt"
+    new_file1.write_text("Hello, World!")
+    new_file2.write_text("Hello, Cosmos!")
+
+    # add files to shelf
+    init(tmp_path)
+    add(str(new_file1), path1)
+    add(str(new_file2), path2)
+
+    # capture the output of list_datasets with regex
+    from io import StringIO
+    import sys
+
+    captured_output = StringIO()
+    sys.stdout = captured_output
+    list_datasets("test_dataset1")
+    sys.stdout = sys.__stdout__
+
+    output = captured_output.getvalue().strip().split("\n")
+    assert output == ["test_namespace/test_dataset1/2024-07-26.meta.yaml"]
