@@ -1,118 +1,86 @@
 # shelf
 
-A personal ETL and data lake.
+_A personal ETL and data lake._
 
 ## Overview
 
-Shelf is a personal ETL framework for managing small data files and directories in a content-addressable way.
+Shelf is a library and personal ETL framework for managing small data files and directories in a content-addressable way.
 
-## Shelving a Data File
+Metadata is kept on-disk in a `data/` folder. Data is definitively stored in an S3-compatible store, but fetched locally for processing.
 
-To shelve a data file by adding it in a content-addressable way to the S3-compatible store, use the `shelf add` function.
+```mermaid
+subgraph git-repo
+    metadata
+end
 
-### Usage
+subgraph s3
+    data
+end
 
-1. Ensure you have configured your S3-compatible storage credentials in a `.env` file. You can use the provided `.env.example` as a template.
-
-2. Call the `shelf add` function with the appropriate arguments:
-
-```python
-from shelf import shelve_data_file
-
-file_path = 'path/to/your/datafile.csv'
-path = 'your_namespace/your_dataset/your_version'
-
-shelve_data_file(file_path, path)
+metadata --> data
 ```
 
-This will:
+Every dataset in a shelf is an immutable file or folder with a corresponding metadata file containing its checksum. A dataset is identified by a path, which must end in a `version` (a date or `latest`).
 
-- Generate a checksum for the file.
-- Upload the file to the S3-compatible store using the checksum as the key.
-- Create a metadata record in the `metadata` directory with the checksum and other details.
-- Open the metadata file in an interactive editor for editing.
+For example, valid dataset paths include:
 
-## Shelving a Directory
+- `countries/2020-04-07`
+- `who/covid-19/latest`
+- `some/very/long/qualified/path/2024-07-01`
 
-To shelve a directory by adding all its files in a content-addressable way to the S3-compatible store, use the `shelf add` function.
+## Usage
 
-### Usage
+### Install the package
 
-1. Ensure you have configured your S3-compatible storage credentials in a `.env` file. You can use the provided `.env.example` as a template.
+Start by installing the shelf package, either globally, or into an existing Python project.
 
-2. Call the `shelf add` function with the appropriate arguments:
+`pip install git+https://github.com/larsyencken/shelf`
 
-```python
-from shelf import shelve_data_file
+### Initialise a shelf
 
-directory_path = 'path/to/your/directory'
-path = 'your_namespace/your_dataset/your_version'
+Enter the folder where you want to store your data and metadata, and run:
 
-shelve_data_file(directory_path, path)
+`shelf init`
+
+This will create a `shelf.yaml` file, which will serve as the catalogue of all the data in your shelf.
+
+### Configure object storage
+
+You will need to configure your S3-compatible storage credentials in a `.env` file, in the same directory as your `shelf.yaml` file. Define:
+
+```
+S3_ACCESS_KEY=your_application_key_id
+S3_SECRET_KEY=your_application_key
+S3_BUCKET_NAME=your_bucket_name
+S3_ENDPOINT_URL=your_endpoint_url
 ```
 
-This will:
+Now your shelf is ready to use.
 
-- Generate a checksum for each file in the directory.
-- Upload each file to the S3-compatible store using the checksum as the key.
-- Create a manifest file containing the directory listing and shelve it.
-- Create a metadata record in the `metadata` directory indicating that it's a directory being unpacked.
-- Open the metadata file in an interactive editor for editing.
+### Shelving a file or folder
 
-## Command Line Usage
+From within your shelf folder, run `shelf add path/to/your/file_or_folder dataset_name` to add a file to your shelf. See the earlier overview for choosing a dataset name.
 
-You can also use the `shelf` command from the command line to shelve a data file or directory.
-
-### Usage
-
-1. Ensure you have configured your S3-compatible storage credentials in a `.env` file. You can use the provided `.env.example` as a template.
-
-2. Run the `shelf add` command with the appropriate arguments:
-
-```sh
-shelf add path/to/your/datafile.csv your_namespace/your_dataset
+```
+shelf add ~/Downloads/countries.csv countries/latest
 ```
 
-or
+This will upload the file to your S3-compatible storage, and create a metadata file at `data/<dataset_name>.meta.yaml` directory for you to complete.
 
-```sh
-shelf add path/to/your/datafile.csv your_namespace/your_dataset/your_version
-```
+The metadata format has some minimum fields, but is meant for you to extend as needed for your own purposes. Best practice would be to retain the provenance and licence information of any data you add to your shelf, especially if it originates from a third party.
 
-or
+### Restoring a file from the shelf
 
-```sh
-shelf add path/to/your/directory your_namespace/your_dataset/your_version
-```
+Your shelf is designed to be managed in a git repository, with data stored outside of the repo in S3. This means that on a new machine, you can clone the repo, and run `shelf get` to restore all the data from the shelf.
 
-This will:
+You can also run `shelf get some_regex` to only fetch files whose dataset name matches the regex.
 
-- Generate a checksum for the file or each file in the directory.
-- Upload the file or each file in the directory to the S3-compatible store using the checksum as the key.
-- Create a manifest file containing the directory listing and shelve it (if a directory is provided).
-- Create a metadata record in the `metadata` directory with the checksum and other details.
-- Print a message indicating the file or directory is being shelved.
-- Open the metadata file in an interactive editor for editing.
-- Copy the file or directory to the `data` directory with the same structure as the metadata directory, keeping its original extension.
+## Bugs
 
-## Restoring Data
+Please report any issues at: https://github.com/larsyencken/shelf/issues
 
-To restore data from the content store and unpack it into the `data/` folder, use the `shelf get` command.
+## Changelog
 
-### Usage
-
-1. Ensure you have configured your S3-compatible storage credentials in a `.env` file. You can use the provided `.env.example` as a template.
-
-2. Run the `shelf get` command with the appropriate arguments:
-
-```sh
-shelf get [optional_regex]
-```
-
-This will:
-
-- Fetch things from the content store and unpack them into `data/`.
-- If an optional regex argument is provided, it will match against metadata path names to determine what to include.
-- If no argument is provided, it will walk the `metadata/` folder and fetch everything.
-- Only re-fetch things whose local checksum in the `data/` folder is out of date.
-- Restore directories (and their subdirectories) from the content store.
+- `dev``
+  - Initialise a repo with `shelf.yaml`
+  - `shelf add` and `shelf get` with file and directory support

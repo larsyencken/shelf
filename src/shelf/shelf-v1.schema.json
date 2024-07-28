@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Shelf config",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "Version of the shelf config file"
+    },
+    "data_dir": {
+      "type": "string",
+      "description": "Directory where the shelf data is stored, relative to this file.",
+      "default": "data"
+    },
+    "steps": {
+      "type": "array",
+      "description": "List of available steps to run",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "description": "Name of the step",
+            "pattern": "(snapshot|table)://[a-z0-9-/]+$"
+          },
+          {
+            "type": "object",
+            "patternProperties": {
+              "^table://[a-z0-9-/]+$": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "(snapshot|table)://[a-z0-9-/]+$"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

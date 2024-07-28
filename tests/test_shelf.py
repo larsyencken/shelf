@@ -3,11 +3,9 @@ import shutil
 from pathlib import Path
 
 import pytest
-from shelf import add, get  # noqa
+from shelf import add, get, init  # noqa
 
 BASE = Path(__file__).parent.parent
-DATA_DIR = BASE / "data"
-METADATA_DIR = BASE / "metadata"
 
 
 @pytest.fixture
@@ -24,6 +22,9 @@ def setup_test_environment(tmp_path):
     test_dir = tmp_path / "test_dir"
     test_dir.mkdir()
 
+    # Change to test directory
+    os.chdir(test_dir)
+
     yield test_dir
 
     # Cleanup
@@ -35,8 +36,10 @@ def test_add_file(setup_test_environment):
 
     # configure test
     path = "test_namespace/test_dataset/2024-07-26"
-    data_file = DATA_DIR / "test_namespace" / "test_dataset" / "2024-07-26.txt"
-    metadata_file = METADATA_DIR / "test_namespace" / "test_dataset" / "2024-07-26.yaml"
+    data_file = tmp_path / "data" / "test_namespace" / "test_dataset" / "2024-07-26.txt"
+    metadata_file = (
+        tmp_path / "data" / "test_namespace" / "test_dataset" / "2024-07-26.meta.yaml"
+    )
 
     # make sure files are clear from previous runs
     data_file.unlink(missing_ok=True)
@@ -47,6 +50,7 @@ def test_add_file(setup_test_environment):
     new_file.write_text("Hello, World!")
 
     # add file to shelf
+    init(tmp_path)
     add(str(new_file), path)
 
     # check for data and metadata
@@ -65,8 +69,8 @@ def test_shelve_directory(setup_test_environment):
 
     # configure test
     path = "test_namespace/test_dataset/latest"
-    data_path = DATA_DIR / path
-    metadata_file = (METADATA_DIR / path).with_suffix(".yaml")
+    data_path = tmp_path / "data" / path
+    metadata_file = (tmp_path / "data" / path).with_suffix(".meta.yaml")
 
     # clear from previous runs
     if data_path.exists():
@@ -82,6 +86,7 @@ def test_shelve_directory(setup_test_environment):
     (parent / "file2.txt").write_text("Hello, Cosmos!")
 
     # add to shelf
+    init(tmp_path)
     add(str(parent), path)
 
     # check the right local files are created
@@ -107,8 +112,8 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
 
     # configure test
     path = "a/b/c/2024-07-26"
-    data_file = DATA_DIR / "a" / "b" / "c" / "2024-07-26.txt"
-    metadata_file = METADATA_DIR / "a" / "b" / "c" / "2024-07-26.yaml"
+    data_file = tmp_path / "data" / "a" / "b" / "c" / "2024-07-26.txt"
+    metadata_file = tmp_path / "data" / "a" / "b" / "c" / "2024-07-26.meta.yaml"
 
     # make sure files are clear from previous runs
     data_file.unlink(missing_ok=True)
@@ -119,6 +124,7 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
     new_file.write_text("Hello, World!")
 
     # add file to shelf
+    init(tmp_path)
     add(str(new_file), path)
 
     # check for data and metadata
@@ -137,8 +143,8 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
 
     # configure test
     path = "a/b/c/latest"
-    data_path = DATA_DIR / path
-    metadata_file = (METADATA_DIR / path).with_suffix(".yaml")
+    data_path = tmp_path / "data" / path
+    metadata_file = (tmp_path / "data" / path).with_suffix(".meta.yaml")
 
     # clear from previous runs
     if data_path.exists():
@@ -154,6 +160,7 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     (parent / "file2.txt").write_text("Hello, Cosmos!")
 
     # add to shelf
+    init(tmp_path)
     dataset_name = add(str(parent), path)
     assert dataset_name == path
 

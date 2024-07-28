@@ -5,37 +5,38 @@ import re
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union
 
 import boto3
+import jsonschema
 import yaml
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
-BASE_DIR = Path(__file__).parent.parent.parent
-DATA_DIR = BASE_DIR / "data"
-METADATA_DIR = BASE_DIR / "metadata"
-
 BLACKLIST = [".DS_Store"]
+
+SCHEMA_PATH = Path(__file__).parent / "shelf-v1.schema.json"
 
 
 def add(file_path: Union[str, Path], dataset_name: str, edit=False) -> str:
+    config = detect_shelf_config()
     file_path = Path(file_path)
     dataset_name = _process_dataset_name(dataset_name)
 
     print(f"Shelving: {file_path}")
-    print(f"  CREATE   metadata/{dataset_name}.json")
+    print(f"  CREATE   data/{dataset_name}.meta.json")
     if file_path.is_dir():
-        metadata = add_directory_to_shelf(file_path, dataset_name)
+        metadata = add_directory_to_shelf(config, file_path, dataset_name)
     else:
-        metadata = add_file_to_shelf(file_path, dataset_name)
+        metadata = add_file_to_shelf(config, file_path, dataset_name)
 
     # Save metadata record to YAML file
-    metadata_file = save_metadata(metadata, dataset_name)
+    metadata_file = save_metadata(config, metadata, dataset_name)
 
     # Open metadata file in interactive editor
     if edit and sys.stdout.isatty():
@@ -44,11 +45,13 @@ def add(file_path: Union[str, Path], dataset_name: str, edit=False) -> str:
     return dataset_name
 
 
-def add_directory_to_shelf(file_path: Path, dataset_name: str) -> dict:
+def add_directory_to_shelf(
+    config: "ShelfConfig", file_path: Path, dataset_name: str
+) -> dict:
     # copy directory to data/
-    data_path = DATA_DIR / dataset_name
+    data_path = config.abs_data_dir / dataset_name
     data_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"  COPY     {file_path}/ --> {data_path.relative_to(BASE_DIR)}/")
+    print(f"  COPY     {file_path}/ --> {data_path.relative_to(config.base_dir)}/")
     shutil.copytree(file_path, data_path)
 
     # shelve directory contents
@@ -71,7 +74,7 @@ def add_directory_to_shelf(file_path: Path, dataset_name: str) -> dict:
     }
 
     # Save metadata record to YAML file
-    save_metadata(metadata, dataset_name)
+    save_metadata(config, metadata, dataset_name)
 
     return metadata
 
@@ -96,7 +99,7 @@ def add_directory_to_s3(file_path):
     return sorted(checksums, key=lambda x: x["path"])
 
 
-def add_file_to_shelf(file_path: Path, dataset_name: str) -> dict:
+def add_file_to_shelf(config, file_path: Path, dataset_name: str) -> dict:
     # Generate checksum for the file
     checksum = generate_checksum(file_path)
 
@@ -104,7 +107,7 @@ def add_file_to_shelf(file_path: Path, dataset_name: str) -> dict:
     add_to_s3(file_path, checksum)
 
     # Copy file to data directory
-    copy_to_data_dir(file_path, dataset_name)
+    copy_to_data_dir(config, file_path, dataset_name)
 
     # Create metadata record
     metadata = {
@@ -138,11 +141,11 @@ def add_to_s3(file_path: Union[str, Path], checksum: str) -> None:
     s3.upload_file(file_path, bucket_name, str(dest_path))
 
 
-def save_metadata(metadata: dict, dataset_name: str) -> Path:
-    metadata_dir = METADATA_DIR / dataset_name
+def save_metadata(config: "ShelfConfig", metadata: dict, dataset_name: str) -> Path:
+    metadata_dir = config.abs_data_dir / dataset_name
     metadata_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    metadata_file = metadata_dir.with_suffix(".yaml")
+    metadata_file = metadata_dir.with_suffix(".meta.yaml")
 
     with open(metadata_file, "w") as f:
         yaml.dump(metadata, f)
@@ -155,19 +158,20 @@ def open_in_editor(file_path: Path) -> None:
     subprocess.run([editor, file_path])
 
 
-def copy_to_data_dir(file_path: Path, dataset_name: str) -> None:
-    data_dir = DATA_DIR / dataset_name
+def copy_to_data_dir(config, file_path: Path, dataset_name: str) -> None:
+    data_dir = config.abs_data_dir / dataset_name
     data_dir.parent.mkdir(parents=True, exist_ok=True)
 
     assert not Path(file_path).is_dir()
 
     data_file = data_dir.with_suffix(file_path.suffix)
     shutil.copy2(file_path, data_file)
-    print(f"  COPY     {file_path} --> {data_file}")
+    print(f"  COPY     {file_path} --> {data_file.relative_to(config.base_dir)}")
 
 
 def get(path: Optional[str] = None) -> None:
-    datasets = walk_metadata_files()
+    config = detect_shelf_config()
+    datasets = walk_metadata_files(config)
     if path:
         regex = re.compile(path)
         datasets = [d for d in datasets if regex.search(str(d))]
@@ -179,10 +183,10 @@ def get(path: Optional[str] = None) -> None:
         restore_dataset(metadata_file)
 
 
-def walk_metadata_files() -> list[Path]:
+def walk_metadata_files(config: "ShelfConfig") -> list[Path]:
     return [
         Path(root) / file
-        for root, _, files in os.walk("metadata")
+        for root, _, files in os.walk(config.abs_data_dir)
         for file in files
         if file.endswith(".yaml")
     ]
@@ -196,29 +200,26 @@ def restore_dataset(metadata_file: Path) -> None:
 
     print(f"Restoring: {dataset_name}")
 
-    data_dir = DATA_DIR / dataset_name
-    data_dir.parent.mkdir(parents=True, exist_ok=True)
+    data_path = Path(str(metadata_file).replace(".meta.yaml", ""))
+    config = detect_shelf_config()
 
     if metadata.get("type") == "directory":
-        restore_directory(metadata, data_dir)
+        restore_directory(config, metadata, data_path)
     else:
-        restore_file(metadata, data_dir)
+        restore_file(config, metadata, data_path)
 
 
-def restore_file(metadata: dict, data_dir: Path) -> None:
+def restore_file(config: "ShelfConfig", metadata: dict, data_path: Path) -> None:
     file_extension = metadata["extension"]
-    dest_file = data_dir.with_suffix(file_extension)
-    fetch_from_s3(metadata["checksum"], dest_file)
+    dest_file = data_path.with_suffix(file_extension)
+    fetch_from_s3(config, metadata["checksum"], dest_file)
 
 
-def restore_directory(metadata: dict, data_dir: Path):
-    # make the parent directory
-    dest_dir = data_dir
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    # fetch the manifest into it
-    manifest_file = dest_dir / "MANIFEST.yaml"
-    fetch_from_s3(metadata["manifest"], manifest_file)
+def restore_directory(config: "ShelfConfig", metadata: dict, data_path: Path):
+    # fetch the manifest
+    data_path.mkdir()
+    manifest_file = data_path / "MANIFEST.yaml"
+    fetch_from_s3(config, metadata["manifest"], manifest_file)
 
     # load its records
     with open(manifest_file, "r") as f:
@@ -226,18 +227,18 @@ def restore_directory(metadata: dict, data_dir: Path):
 
     # fetch each file it mentions
     for item in manifest:
-        file_path = data_dir / item["path"]
+        file_path = data_path / item["path"]
 
         # let's not shoot ourselves in the foot and go writing anywhere in the filesystem
-        if not file_path.resolve().is_relative_to(dest_dir.resolve()):
+        if not file_path.resolve().is_relative_to(data_path.resolve()):
             raise Exception(
-                f'manifest contains path {item['path']} outside the destination directory {dest_dir}'
+                f'manifest contains path {item['path']} outside the destination directory {data_path}'
             )
 
-        fetch_from_s3(item["checksum"], file_path)
+        fetch_from_s3(config, item["checksum"], file_path)
 
 
-def fetch_from_s3(checksum: str, dest_path: Path) -> None:
+def fetch_from_s3(config, checksum: str, dest_path: Path) -> None:
     s3 = boto3.client(
         "s3",
         aws_access_key_id=os.getenv("S3_ACCESS_KEY"),
@@ -248,7 +249,7 @@ def fetch_from_s3(checksum: str, dest_path: Path) -> None:
     assert bucket_name
     s3_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
     print(
-        f"  FETCH    s3://{bucket_name}/{s3_path} --> {dest_path.resolve().relative_to(BASE_DIR)}"
+        f"  FETCH    s3://{bucket_name}/{s3_path} --> {dest_path.resolve().relative_to(config.base_dir)}"
     )
     s3.download_file(bucket_name, s3_path, str(dest_path))
 
@@ -281,6 +282,10 @@ def main():
         help="Optional regex to match against metadata path names",
     )
 
+    subparsers.add_parser(
+        "init", help="Initialize the shelf with the necessary directories"
+    )
+
     args = parser.parse_args()
 
     if args.command == "add":
@@ -288,6 +293,9 @@ def main():
 
     elif args.command == "get":
         return get(args.path)
+
+    elif args.command == "init":
+        return init()
 
     parser.print_help()
 
@@ -310,6 +318,60 @@ def _process_dataset_name(dataset_name: str) -> str:
 
 def _is_valid_version(version: str) -> bool:
     return bool(re.match(r"\d{4}-\d{2}-\d{2}", version)) or version == "latest"
+
+
+def init(path: Optional[Path] = None) -> None:
+    if not path:
+        path = Path(".")
+
+    shelf_file = path / "shelf.yaml"
+    if shelf_file.exists():
+        print("Detected existing shelf.yaml file")
+        return
+
+    print("Initializing a new shelf")
+    print(f"  CREATE   {shelf_file}")
+    with shelf_file.open("w") as ostream:
+        yaml.dump({"version": 1, "data_dir": "data", "steps": []}, ostream)
+
+
+@dataclass
+class ShelfConfig:
+    config_file: Path
+    version: int
+    data_dir: str
+    steps: list[Union[str, dict]]
+
+    @property
+    def abs_data_dir(self) -> Path:
+        return self.config_file.parent / self.data_dir
+
+    @property
+    def base_dir(self) -> Path:
+        return self.config_file.parent / self.data_dir
+
+
+def detect_shelf_config() -> ShelfConfig:
+    config_file, config = _find_shelf_config()
+    schema = _load_schema()
+    jsonschema.validate(config, schema)
+    return ShelfConfig(config_file, **config)
+
+
+def _find_shelf_config() -> tuple[Path, dict]:
+    current_dir = Path(".").resolve()
+    while current_dir != Path("/"):
+        config_file = current_dir / "shelf.yaml"
+        if config_file.exists():
+            with open(config_file, "r") as istream:
+                return config_file, yaml.safe_load(istream)
+
+    raise Exception("No shelf.yaml file found -- have you run shelf init?")
+
+
+def _load_schema() -> dict:
+    with open(SCHEMA_PATH, "r") as istream:
+        return yaml.safe_load(istream)
 
 
 if __name__ == "__main__":
