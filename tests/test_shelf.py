@@ -63,7 +63,7 @@ def test_add_file(setup_test_environment):
     # check if data path is added to .gitignore
     assert gitignore_file.exists()
     with open(gitignore_file, "r") as f:
-        assert f"{path}\n" in f.read()
+        assert f"{path}.txt\n" in f.read()
 
     # re-fectch it from shelf
     data_file.unlink()
