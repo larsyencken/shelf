@@ -24,8 +24,8 @@ SCHEMA_PATH = Path(__file__).parent / "shelf-v1.schema.json"
 
 
 class Shelf:
-    def __init__(self, config: Optional[Path] = None):
-        self.config = self.detect_shelf_config(config)
+    def __init__(self, config_file: Optional[Path] = None):
+        self.config = ShelfConfig.detect(config_file)
 
     def add(self, file_path: Union[str, Path], dataset_name: str, edit=False) -> str:
         file_path = Path(file_path)
@@ -46,7 +46,8 @@ class Shelf:
             self.open_in_editor(metadata_file)
 
         # Append data path to .gitignore
-        self.append_to_gitignore(metadata, dataset_name)
+        gitignore = self.config.base_dir / ".gitignore"
+        append_to_gitignore(gitignore, metadata)
 
         return dataset_name
 
@@ -54,7 +55,9 @@ class Shelf:
         # copy directory to data/
         data_path = self.config.abs_data_dir / dataset_name
         data_path.parent.mkdir(parents=True, exist_ok=True)
-        print(f"  COPY     {file_path}/ --> {data_path.relative_to(self.config.base_dir)}/")
+        print(
+            f"  COPY     {file_path}/ --> {data_path.relative_to(self.config.base_dir)}/"
+        )
         shutil.copytree(file_path, data_path)
 
         # shelve directory contents
@@ -163,7 +166,9 @@ class Shelf:
 
         data_file = data_dir.with_suffix(file_path.suffix)
         shutil.copy2(file_path, data_file)
-        print(f"  COPY     {file_path} --> {data_file.relative_to(self.config.base_dir)}")
+        print(
+            f"  COPY     {file_path} --> {data_file.relative_to(self.config.base_dir)}"
+        )
 
     def get(self, path: Optional[str] = None) -> None:
         datasets = self.walk_metadata_files()
@@ -246,7 +251,8 @@ class Shelf:
         metadata_files = self.walk_metadata_files()
         suffix = ".meta.yaml"
         dataset_names = [
-            str(d.relative_to(self.config.abs_data_dir))[: -len(suffix)] for d in metadata_files
+            str(d.relative_to(self.config.abs_data_dir))[: -len(suffix)]
+            for d in metadata_files
         ]
 
         if regex:
@@ -287,68 +293,70 @@ class Shelf:
     def _is_valid_version(self, version: str) -> bool:
         return bool(re.match(r"\d{4}-\d{2}-\d{2}", version)) or version == "latest"
 
-    def init(self, path: Optional[Path] = None) -> None:
+    @classmethod
+    def init(cls, path: Optional[Path] = None) -> "Shelf":
         if not path:
             path = Path(".")
 
         shelf_file = path / "shelf.yaml"
         if shelf_file.exists():
             print("Detected existing shelf.yaml file")
-            return
-
-        print("Initializing a new shelf")
-        print(f"  CREATE   {shelf_file}")
-        with shelf_file.open("w") as ostream:
-            yaml.dump({"version": 1, "data_dir": "data", "steps": []}, ostream)
-
-    @dataclass
-    class ShelfConfig:
-        config_file: Path
-        version: int
-        data_dir: str
-        steps: list[Union[str, dict]]
-
-        @property
-        def abs_data_dir(self) -> Path:
-            return self.config_file.parent / self.data_dir
-
-        @property
-        def base_dir(self) -> Path:
-            return self.config_file.parent / self.data_dir
-
-    def detect_shelf_config(self, config_file: Optional[Path] = None) -> "Shelf.ShelfConfig":
-        config_file, config = self._find_shelf_config(config_file)
-        schema = self._load_schema()
-        jsonschema.validate(config, schema)
-        return self.ShelfConfig(config_file, **config)
-
-    def _find_shelf_config(self, config: Optional[Path] = None) -> tuple[Path, dict]:
-        if config:
-            config_file = config.resolve()
         else:
-            config_file = Path(".").resolve() / "shelf.yaml"
-        if config_file.exists():
-            with open(config_file, "r") as istream:
-                return config_file, yaml.safe_load(istream)
+            print("Initializing a new shelf")
+            print(f"  CREATE   {shelf_file}")
+            with shelf_file.open("w") as ostream:
+                yaml.dump({"version": 1, "data_dir": "data", "steps": []}, ostream)
 
-        raise Exception("No shelf.yaml file found -- have you run shelf init?")
+        return cls(shelf_file)
 
-    def _load_schema(self) -> dict:
-        with open(SCHEMA_PATH, "r") as istream:
-            return yaml.safe_load(istream)
 
-    def append_to_gitignore(self, metadata: dict, dataset_name: str) -> None:
-        gitignore_path = self.config.config_file.parent / ".gitignore"
-        if not gitignore_path.exists():
-            print("  CREATE  .gitignore")
+@dataclass
+class ShelfConfig:
+    config_file: Path
+    version: int
+    data_dir: str
+    steps: list[Union[str, dict]]
 
-        relative_data_path = f"data/{dataset_name}"
-        if metadata["type"] == "file":
-            relative_data_path += metadata["extension"]
+    @property
+    def abs_data_dir(self) -> Path:
+        return (self.config_file.parent / self.data_dir).resolve()
 
-        with open(gitignore_path, "a") as f:
-            f.write(f"{relative_data_path}\n")
-        print(f"  APPEND   {relative_data_path} to .gitignore")
+    @property
+    def base_dir(self) -> Path:
+        return self.config_file.parent.resolve()
+
+    @staticmethod
+    def detect(config_file: Optional[Path] = None) -> "ShelfConfig":
+        if not config_file:
+            config_file = Path("shelf.yaml")
+
+        if not config_file.exists():
+            raise FileNotFoundError("No shelf.yaml file found in the current directory")
+
+        with config_file.open("r") as istream:
+            config = yaml.safe_load(istream)
+
+        schema = _load_schema()
+        jsonschema.validate(config, schema)
+        return ShelfConfig(config_file, **config)
+
+
+def _load_schema() -> dict:
+    with open(SCHEMA_PATH, "r") as istream:
+        return yaml.safe_load(istream)
+
+
+def append_to_gitignore(gitignore_path: Path, metadata: dict) -> None:
+    if not gitignore_path.exists():
+        print("  CREATE  .gitignore")
+
+    relative_data_path = f"data/{metadata['dataset_name']}"
+    if metadata["type"] == "file":
+        relative_data_path += metadata["extension"]
+
+    with open(gitignore_path, "a") as f:
+        f.write(f"{relative_data_path}\n")
+    print(f"  APPEND   {relative_data_path} to .gitignore")
 
 
 def main():
@@ -395,6 +403,10 @@ def main():
 
     args = parser.parse_args()
 
+    if args.command == "init":
+        Shelf.init()
+        return
+
     shelf = Shelf()
 
     if args.command == "add":
@@ -405,8 +417,5 @@ def main():
 
     elif args.command == "list":
         return shelf.list_datasets(args.regex)
-
-    elif args.command == "init":
-        return shelf.init()
 
     parser.print_help()

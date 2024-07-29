@@ -53,8 +53,8 @@ def test_add_file(setup_test_environment):
     new_file.write_text("Hello, World!")
 
     # add file to shelf
-    shelf = Shelf()
-    shelf.init(tmp_path)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
     shelf.add(str(new_file), path)
 
     # check for data and metadata
@@ -98,8 +98,8 @@ def test_shelve_directory(setup_test_environment):
     (parent / "file2.txt").write_text("Hello, Cosmos!")
 
     # add to shelf
-    shelf = Shelf()
-    shelf.init(tmp_path)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
     shelf.add(str(parent), path)
 
     # check the right local files are created
@@ -142,8 +142,8 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
     new_file.write_text("Hello, World!")
 
     # add file to shelf
-    shelf = Shelf()
-    shelf.init(tmp_path)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
     shelf.add(str(new_file), path)
 
     # check for data and metadata
@@ -179,8 +179,8 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     (parent / "file2.txt").write_text("Hello, Cosmos!")
 
     # add to shelf
-    shelf = Shelf()
-    shelf.init(tmp_path)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
     dataset_name = shelf.add(str(parent), path)
     assert dataset_name == path
 
@@ -214,8 +214,8 @@ def test_list_datasets(setup_test_environment):
     new_file2.write_text("Hello, Cosmos!")
 
     # add files to shelf
-    shelf = Shelf()
-    shelf.init(tmp_path)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
     shelf.add(str(new_file1), path1)
     shelf.add(str(new_file2), path2)
 
@@ -247,8 +247,8 @@ def test_list_datasets_with_regex(setup_test_environment):
     new_file2.write_text("Hello, Cosmos!")
 
     # add files to shelf
-    shelf = Shelf()
-    shelf.init(tmp_path)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
     shelf.add(str(new_file1), path1)
     shelf.add(str(new_file2), path2)
 
