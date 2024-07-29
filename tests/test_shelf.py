@@ -263,3 +263,63 @@ def test_list_datasets_with_regex(setup_test_environment):
 
     output = captured_output.getvalue().strip().split("\n")
     assert output == ["test_namespace/test_dataset1/2024-07-26"]
+
+
+def test_get_only_out_of_date_datasets(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    path1 = "test_namespace/test_dataset1/2024-07-26"
+    path2 = "test_namespace/test_dataset2/2024-07-27"
+    new_file1 = tmp_path / "file1.txt"
+    new_file2 = tmp_path / "file2.txt"
+    new_file1.write_text("Hello, World!")
+    new_file2.write_text("Hello, Cosmos!")
+
+    # add files to shelf
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
+    shelf.add(str(new_file1), path1)
+    shelf.add(str(new_file2), path2)
+
+    # modify one of the files to make it out of date
+    data_file1 = tmp_path / "data" / "test_namespace" / "test_dataset1" / "2024-07-26.txt"
+    data_file1.write_text("Modified content")
+
+    # restore datasets
+    shelf.get()
+
+    # check that only the out-of-date dataset was fetched
+    assert data_file1.read_text() == "Hello, World!"
+    data_file2 = tmp_path / "data" / "test_namespace" / "test_dataset2" / "2024-07-27.txt"
+    assert data_file2.read_text() == "Hello, Cosmos!"
+
+
+def test_get_with_force_option(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    path1 = "test_namespace/test_dataset1/2024-07-26"
+    path2 = "test_namespace/test_dataset2/2024-07-27"
+    new_file1 = tmp_path / "file1.txt"
+    new_file2 = tmp_path / "file2.txt"
+    new_file1.write_text("Hello, World!")
+    new_file2.write_text("Hello, Cosmos!")
+
+    # add files to shelf
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
+    shelf.add(str(new_file1), path1)
+    shelf.add(str(new_file2), path2)
+
+    # modify one of the files to make it out of date
+    data_file1 = tmp_path / "data" / "test_namespace" / "test_dataset1" / "2024-07-26.txt"
+    data_file1.write_text("Modified content")
+
+    # restore datasets with --force option
+    shelf.get(force=True)
+
+    # check that both datasets were fetched
+    assert data_file1.read_text() == "Hello, World!"
+    data_file2 = tmp_path / "data" / "test_namespace" / "test_dataset2" / "2024-07-27.txt"
+    assert data_file2.read_text() == "Hello, Cosmos!"
