@@ -170,7 +170,7 @@ class Shelf:
             f"  COPY     {file_path} --> {data_file.relative_to(self.config.base_dir)}"
         )
 
-    def get(self, path: Optional[str] = None) -> None:
+    def get(self, path: Optional[str] = None, force: bool = False) -> None:
         datasets = self.walk_metadata_files()
         if path:
             regex = re.compile(path)
@@ -180,7 +180,7 @@ class Shelf:
             raise KeyError(f"No datasets found for path: {path}")
 
         for metadata_file in datasets:
-            self.restore_dataset(metadata_file)
+            self.restore_dataset(metadata_file, force)
 
     def walk_metadata_files(self) -> list[Path]:
         return [
@@ -190,7 +190,7 @@ class Shelf:
             if file.endswith(".meta.yaml")
         ]
 
-    def restore_dataset(self, metadata_file: Path) -> None:
+    def restore_dataset(self, metadata_file: Path, force: bool = False) -> None:
         with open(metadata_file, "r") as f:
             metadata = yaml.safe_load(f)
 
@@ -201,36 +201,58 @@ class Shelf:
         data_path = Path(str(metadata_file).replace(".meta.yaml", ""))
 
         if metadata.get("type") == "directory":
-            self.restore_directory(metadata, data_path)
+            self.restore_directory(metadata, data_path, force)
         else:
-            self.restore_file(metadata, data_path)
+            self.restore_file(metadata, data_path, force)
 
-    def restore_file(self, metadata: dict, data_path: Path) -> None:
+    def restore_file(self, metadata: dict, data_path: Path, force: bool = False) -> None:
         file_extension = metadata["extension"]
         dest_file = data_path.with_suffix(file_extension)
-        self.fetch_from_s3(metadata["checksum"], dest_file)
+        if force or not dest_file.exists() or self.generate_checksum(dest_file) != metadata["checksum"]:
+            self.fetch_from_s3(metadata["checksum"], dest_file)
 
-    def restore_directory(self, metadata: dict, data_path: Path):
+    def restore_directory(self, metadata: dict, data_path: Path, force: bool = False):
         # fetch the manifest
-        data_path.mkdir()
-        manifest_file = data_path / "MANIFEST.yaml"
-        self.fetch_from_s3(metadata["manifest"], manifest_file)
+        if force or not data_path.exists() or not self.is_directory_up_to_date(metadata, data_path):
+            if data_path.exists():
+                shutil.rmtree(data_path)
+            data_path.mkdir()
+            manifest_file = data_path / "MANIFEST.yaml"
+            self.fetch_from_s3(metadata["manifest"], manifest_file)
 
-        # load its records
+            # load its records
+            with open(manifest_file, "r") as f:
+                manifest = yaml.safe_load(f)
+
+            # fetch each file it mentions
+            for item in manifest:
+                file_path = data_path / item["path"]
+
+                # let's not shoot ourselves in the foot and go writing anywhere in the filesystem
+                if not file_path.resolve().is_relative_to(data_path.resolve()):
+                    raise Exception(
+                        f'manifest contains path {item["path"]} outside the destination directory {data_path}'
+                    )
+
+                self.fetch_from_s3(item["checksum"], file_path)
+
+    def is_directory_up_to_date(self, metadata: dict, data_path: Path) -> bool:
+        manifest_file = data_path / "MANIFEST.yaml"
+        if not manifest_file.exists():
+            return False
+
+        if self.generate_checksum(manifest_file) != metadata['checksum']:
+            return False
+
         with open(manifest_file, "r") as f:
             manifest = yaml.safe_load(f)
 
-        # fetch each file it mentions
         for item in manifest:
             file_path = data_path / item["path"]
+            if not file_path.exists() or self.generate_checksum(file_path) != item["checksum"]:
+                return False
 
-            # let's not shoot ourselves in the foot and go writing anywhere in the filesystem
-            if not file_path.resolve().is_relative_to(data_path.resolve()):
-                raise Exception(
-                    f'manifest contains path {item['path']} outside the destination directory {data_path}'
-                )
-
-            self.fetch_from_s3(item["checksum"], file_path)
+        return True
 
     def fetch_from_s3(self, checksum: str, dest_path: Path) -> None:
         s3 = boto3.client(
@@ -386,6 +408,11 @@ def main():
         nargs="?",
         help="Optional regex to match against metadata path names",
     )
+    get_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-fetch datasets regardless of their up-to-date status",
+    )
 
     list_parser = subparsers.add_parser(
         "list", help="List all datasets in alphabetical order"
@@ -413,7 +440,7 @@ def main():
         return shelf.add(args.file_path, args.dataset_name)
 
     elif args.command == "get":
-        return shelf.get(args.path)
+        return shelf.get(args.path, args.force)
 
     elif args.command == "list":
         return shelf.list_datasets(args.regex)
