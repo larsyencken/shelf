@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from shelf import add, get, init, list_datasets  # noqa
+from shelf import Shelf  # noqa
 
 BASE = Path(__file__).parent.parent
 
@@ -53,8 +53,9 @@ def test_add_file(setup_test_environment):
     new_file.write_text("Hello, World!")
 
     # add file to shelf
-    init(tmp_path)
-    add(str(new_file), path)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
+    shelf.add(str(new_file), path)
 
     # check for data and metadata
     assert data_file.exists()
@@ -65,9 +66,9 @@ def test_add_file(setup_test_environment):
     with open(gitignore_file, "r") as f:
         assert f"{path}.txt\n" in f.read()
 
-    # re-fectch it from shelf
+    # re-fetch it from shelf
     data_file.unlink()
-    get("test_namespace/test_dataset/2024-07-26")
+    shelf.get("test_namespace/test_dataset/2024-07-26")
     assert data_file.exists()
     assert data_file.read_text() == "Hello, World!"
 
@@ -97,8 +98,9 @@ def test_shelve_directory(setup_test_environment):
     (parent / "file2.txt").write_text("Hello, Cosmos!")
 
     # add to shelf
-    init(tmp_path)
-    add(str(parent), path)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
+    shelf.add(str(parent), path)
 
     # check the right local files are created
     assert data_path.is_dir()
@@ -114,7 +116,7 @@ def test_shelve_directory(setup_test_environment):
     shutil.rmtree(data_path)
 
     # restore from shelf
-    get(path)
+    shelf.get(path)
 
     # check it got restored
     assert data_path.is_dir()
@@ -140,8 +142,9 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
     new_file.write_text("Hello, World!")
 
     # add file to shelf
-    init(tmp_path)
-    add(str(new_file), path)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
+    shelf.add(str(new_file), path)
 
     # check for data and metadata
     assert data_file.exists()
@@ -149,7 +152,7 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
 
     # re-fetch it from shelf
     data_file.unlink()
-    get("a/b/c/2024-07-26")
+    shelf.get("a/b/c/2024-07-26")
     assert data_file.exists()
     assert data_file.read_text() == "Hello, World!"
 
@@ -176,8 +179,9 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     (parent / "file2.txt").write_text("Hello, Cosmos!")
 
     # add to shelf
-    init(tmp_path)
-    dataset_name = add(str(parent), path)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
+    dataset_name = shelf.add(str(parent), path)
     assert dataset_name == path
 
     # check the right local files are created
@@ -189,7 +193,7 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     shutil.rmtree(data_path)
 
     # restore from shelf
-    get(path)
+    shelf.get(path)
 
     # check it got restored
     assert data_path.is_dir()
@@ -210,9 +214,10 @@ def test_list_datasets(setup_test_environment):
     new_file2.write_text("Hello, Cosmos!")
 
     # add files to shelf
-    init(tmp_path)
-    add(str(new_file1), path1)
-    add(str(new_file2), path2)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
+    shelf.add(str(new_file1), path1)
+    shelf.add(str(new_file2), path2)
 
     # capture the output of list_datasets
     import sys
@@ -220,7 +225,7 @@ def test_list_datasets(setup_test_environment):
 
     captured_output = StringIO()
     sys.stdout = captured_output
-    list_datasets()
+    shelf.list_datasets()
     sys.stdout = sys.__stdout__
 
     output = captured_output.getvalue().strip().split("\n")
@@ -242,9 +247,10 @@ def test_list_datasets_with_regex(setup_test_environment):
     new_file2.write_text("Hello, Cosmos!")
 
     # add files to shelf
-    init(tmp_path)
-    add(str(new_file1), path1)
-    add(str(new_file2), path2)
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
+    shelf.add(str(new_file1), path1)
+    shelf.add(str(new_file2), path2)
 
     # capture the output of list_datasets with regex
     import sys
@@ -252,7 +258,7 @@ def test_list_datasets_with_regex(setup_test_environment):
 
     captured_output = StringIO()
     sys.stdout = captured_output
-    list_datasets("test_dataset1")
+    shelf.list_datasets("test_dataset1")
     sys.stdout = sys.__stdout__
 
     output = captured_output.getvalue().strip().split("\n")
