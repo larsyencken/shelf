@@ -196,7 +196,7 @@ class Shelf:
 
         dataset_name = metadata["dataset_name"]
 
-        print(f"Restoring: {dataset_name}")
+        print(dataset_name)
 
         data_path = Path(str(metadata_file).replace(".meta.yaml", ""))
 
@@ -205,15 +205,25 @@ class Shelf:
         else:
             self.restore_file(metadata, data_path, force)
 
-    def restore_file(self, metadata: dict, data_path: Path, force: bool = False) -> None:
+    def restore_file(
+        self, metadata: dict, data_path: Path, force: bool = False
+    ) -> None:
         file_extension = metadata["extension"]
         dest_file = data_path.with_suffix(file_extension)
-        if force or not dest_file.exists() or self.generate_checksum(dest_file) != metadata["checksum"]:
+        if (
+            force
+            or not dest_file.exists()
+            or self.generate_checksum(dest_file) != metadata["checksum"]
+        ):
             self.fetch_from_s3(metadata["checksum"], dest_file)
 
     def restore_directory(self, metadata: dict, data_path: Path, force: bool = False):
         # fetch the manifest
-        if force or not data_path.exists() or not self.is_directory_up_to_date(metadata, data_path):
+        if (
+            force
+            or not data_path.exists()
+            or not self.is_directory_up_to_date(metadata, data_path)
+        ):
             if data_path.exists():
                 shutil.rmtree(data_path)
             data_path.mkdir()
@@ -241,7 +251,7 @@ class Shelf:
         if not manifest_file.exists():
             return False
 
-        if self.generate_checksum(manifest_file) != metadata['checksum']:
+        if self.generate_checksum(manifest_file) != metadata["manifest"]:
             return False
 
         with open(manifest_file, "r") as f:
@@ -249,7 +259,10 @@ class Shelf:
 
         for item in manifest:
             file_path = data_path / item["path"]
-            if not file_path.exists() or self.generate_checksum(file_path) != item["checksum"]:
+            if (
+                not file_path.exists()
+                or self.generate_checksum(file_path) != item["checksum"]
+            ):
                 return False
 
         return True
