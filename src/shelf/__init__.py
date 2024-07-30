@@ -33,7 +33,7 @@ class Shelf:
         step_name = f"snapshot://{dataset_name}"
 
         print(f"Shelving: {file_path}")
-        print(f"  CREATE   data/{dataset_name}.meta.json")
+        print(f"  CREATE   data/snapshots/{dataset_name}.meta.json")
         if file_path.is_dir():
             metadata = self.add_directory_to_shelf(file_path, dataset_name)
         else:
@@ -57,7 +57,7 @@ class Shelf:
 
     def add_directory_to_shelf(self, file_path: Path, dataset_name: str) -> dict:
         # copy directory to data/
-        data_path = self.config.abs_data_dir / dataset_name
+        data_path = self.config.abs_data_dir / "snapshots" / dataset_name
         data_path.parent.mkdir(parents=True, exist_ok=True)
         print(
             f"  COPY     {file_path}/ --> {data_path.relative_to(self.config.base_dir)}/"
@@ -148,7 +148,7 @@ class Shelf:
         s3.upload_file(file_path, bucket_name, str(dest_path))
 
     def save_metadata(self, metadata: dict, dataset_name: str) -> Path:
-        metadata_dir = self.config.abs_data_dir / dataset_name
+        metadata_dir = self.config.abs_data_dir / "snapshots" / dataset_name
         metadata_dir.parent.mkdir(parents=True, exist_ok=True)
 
         metadata_file = metadata_dir.with_suffix(".meta.yaml")
@@ -163,7 +163,7 @@ class Shelf:
         subprocess.run([editor, file_path])
 
     def copy_to_data_dir(self, file_path: Path, dataset_name: str) -> None:
-        data_dir = self.config.abs_data_dir / dataset_name
+        data_dir = self.config.abs_data_dir / "snapshots" / dataset_name
         data_dir.parent.mkdir(parents=True, exist_ok=True)
 
         assert not Path(file_path).is_dir()
@@ -185,16 +185,8 @@ class Shelf:
 
         for step in steps:
             assert step.startswith("snapshot://")
-            metadata_file = Path(f'data/{step.split("//")[1]}.meta.yaml')
+            metadata_file = Path(f'data/snapshots/{step.split("//")[1]}.meta.yaml')
             self.restore_dataset(metadata_file, force)
-
-    def walk_metadata_files(self) -> list[Path]:
-        return [
-            Path(root) / file
-            for root, _, files in os.walk(self.config.abs_data_dir)
-            for file in files
-            if file.endswith(".meta.yaml")
-        ]
 
     def restore_dataset(self, metadata_file: Path, force: bool = False) -> None:
         with open(metadata_file, "r") as f:
@@ -298,9 +290,7 @@ class Shelf:
             print(name)
 
     def __iter__(self):
-        metadata_files = self.walk_metadata_files()
-        for metadata_file in metadata_files:
-            yield metadata_file
+        yield from sorted(self.config.steps)
 
     def __getitem__(self, dataset_path: str):
         metadata_file = self.config.abs_data_dir / f"{dataset_path}.meta.yaml"
@@ -409,7 +399,7 @@ def append_to_gitignore(gitignore_path: Path, metadata: dict) -> None:
     if not gitignore_path.exists():
         print("  CREATE  .gitignore")
 
-    relative_data_path = f"data/{metadata['dataset_name']}"
+    relative_data_path = f"data/snapshots/{metadata['dataset_name']}"
     if metadata["type"] == "file":
         relative_data_path += metadata["extension"]
 

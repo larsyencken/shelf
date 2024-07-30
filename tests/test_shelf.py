@@ -37,9 +37,19 @@ def test_add_file(setup_test_environment):
 
     # configure test
     path = "test_namespace/test_dataset/2024-07-26"
-    data_file = tmp_path / "data" / "test_namespace" / "test_dataset" / "2024-07-26.txt"
+    data_file = (
+        tmp_path
+        / "data/snapshots"
+        / "test_namespace"
+        / "test_dataset"
+        / "2024-07-26.txt"
+    )
     metadata_file = (
-        tmp_path / "data" / "test_namespace" / "test_dataset" / "2024-07-26.meta.yaml"
+        tmp_path
+        / "data/snapshots"
+        / "test_namespace"
+        / "test_dataset"
+        / "2024-07-26.meta.yaml"
     )
     gitignore_file = tmp_path / ".gitignore"
     shelf_yaml_file = tmp_path / "shelf.yaml"
@@ -88,8 +98,8 @@ def test_shelve_directory(setup_test_environment):
 
     # configure test
     path = "test_namespace/test_dataset/latest"
-    data_path = tmp_path / "data" / path
-    metadata_file = (tmp_path / "data" / path).with_suffix(".meta.yaml")
+    data_path = tmp_path / "data/snapshots/" / path
+    metadata_file = (tmp_path / "data/snapshots" / path).with_suffix(".meta.yaml")
     gitignore_file = tmp_path / ".gitignore"
     shelf_yaml_file = tmp_path / "shelf.yaml"
 
@@ -149,8 +159,10 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
 
     # configure test
     path = "a/b/c/2024-07-26"
-    data_file = tmp_path / "data" / "a" / "b" / "c" / "2024-07-26.txt"
-    metadata_file = tmp_path / "data" / "a" / "b" / "c" / "2024-07-26.meta.yaml"
+    data_file = tmp_path / "data/snapshots" / "a" / "b" / "c" / "2024-07-26.txt"
+    metadata_file = (
+        tmp_path / "data/snapshots" / "a" / "b" / "c" / "2024-07-26.meta.yaml"
+    )
     shelf_yaml_file = tmp_path / "shelf.yaml"
 
     # make sure files are clear from previous runs
@@ -190,8 +202,8 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
 
     # configure test
     path = "a/b/c/latest"
-    data_path = tmp_path / "data" / path
-    metadata_file = (tmp_path / "data" / path).with_suffix(".meta.yaml")
+    data_path = tmp_path / "data/snapshots" / path
+    metadata_file = (tmp_path / "data/snapshots" / path).with_suffix(".meta.yaml")
     shelf_yaml_file = tmp_path / "shelf.yaml"
 
     # clear from previous runs
@@ -321,7 +333,11 @@ def test_get_only_out_of_date_datasets(setup_test_environment):
 
     # modify one of the files to make it out of date
     data_file1 = (
-        tmp_path / "data" / "test_namespace" / "test_dataset1" / "2024-07-26.txt"
+        tmp_path
+        / "data/snapshots"
+        / "test_namespace"
+        / "test_dataset1"
+        / "2024-07-26.txt"
     )
     data_file1.write_text("Modified content")
 
@@ -331,7 +347,11 @@ def test_get_only_out_of_date_datasets(setup_test_environment):
     # check that only the out-of-date dataset was fetched
     assert data_file1.read_text() == "Hello, World!"
     data_file2 = (
-        tmp_path / "data" / "test_namespace" / "test_dataset2" / "2024-07-27.txt"
+        tmp_path
+        / "data/snapshots"
+        / "test_namespace"
+        / "test_dataset2"
+        / "2024-07-27.txt"
     )
     assert data_file2.read_text() == "Hello, Cosmos!"
 
@@ -355,7 +375,11 @@ def test_get_with_force_option(setup_test_environment):
 
     # modify one of the files to make it out of date
     data_file1 = (
-        tmp_path / "data" / "test_namespace" / "test_dataset1" / "2024-07-26.txt"
+        tmp_path
+        / "data/snapshots"
+        / "test_namespace"
+        / "test_dataset1"
+        / "2024-07-26.txt"
     )
     data_file1.write_text("Modified content")
 
@@ -365,6 +389,10 @@ def test_get_with_force_option(setup_test_environment):
     # check that both datasets were fetched
     assert data_file1.read_text() == "Hello, World!"
     data_file2 = (
-        tmp_path / "data" / "test_namespace" / "test_dataset2" / "2024-07-27.txt"
+        tmp_path
+        / "data/snapshots"
+        / "test_namespace"
+        / "test_dataset2"
+        / "2024-07-27.txt"
     )
     assert data_file2.read_text() == "Hello, Cosmos!"
