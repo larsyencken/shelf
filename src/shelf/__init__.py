@@ -199,7 +199,6 @@ class Shelf:
         print(dataset_name)
 
         data_path = Path(str(metadata_file).replace(".meta.yaml", ""))
-
         if metadata.get("type") == "directory":
             self.restore_directory(metadata, data_path, force)
         else:
@@ -411,6 +410,11 @@ def main():
         type=str,
         help="Dataset name as a relative path of arbitrary size",
     )
+    add_parser.add_argument(
+        "--edit",
+        action="store_true",
+        help="Edit the metadata file in an interactive editor.",
+    )
 
     get_parser = subparsers.add_parser(
         "get", help="Fetch and unpack data from the content store"
@@ -450,7 +454,7 @@ def main():
     shelf = Shelf()
 
     if args.command == "add":
-        return shelf.add(args.file_path, args.dataset_name)
+        return shelf.add(args.file_path, args.dataset_name, edit=args.edit)
 
     elif args.command == "get":
         return shelf.get(args.path, args.force)
