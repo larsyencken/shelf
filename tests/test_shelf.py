@@ -41,12 +41,15 @@ def test_add_file(setup_test_environment):
         tmp_path / "data" / "test_namespace" / "test_dataset" / "2024-07-26.meta.yaml"
     )
     gitignore_file = tmp_path / ".gitignore"
+    shelf_yaml_file = tmp_path / "shelf.yaml"
 
     # make sure files are clear from previous runs
     data_file.unlink(missing_ok=True)
     metadata_file.unlink(missing_ok=True)
     if gitignore_file.exists():
         gitignore_file.unlink()
+    if shelf_yaml_file.exists():
+        shelf_yaml_file.unlink()
 
     # create dummy file
     new_file = tmp_path / "file1.txt"
@@ -66,6 +69,12 @@ def test_add_file(setup_test_environment):
     with open(gitignore_file, "r") as f:
         assert f"{path}.txt\n" in f.read()
 
+    # check if dataset name is added to shelf.yaml under steps
+    assert shelf_yaml_file.exists()
+    with open(shelf_yaml_file, "r") as f:
+        shelf_yaml = yaml.safe_load(f)
+        assert path in shelf_yaml["steps"]
+
     # re-fetch it from shelf
     data_file.unlink()
     shelf.get("test_namespace/test_dataset/2024-07-26")
@@ -81,6 +90,7 @@ def test_shelve_directory(setup_test_environment):
     data_path = tmp_path / "data" / path
     metadata_file = (tmp_path / "data" / path).with_suffix(".meta.yaml")
     gitignore_file = tmp_path / ".gitignore"
+    shelf_yaml_file = tmp_path / "shelf.yaml"
 
     # clear from previous runs
     if data_path.exists():
@@ -88,6 +98,8 @@ def test_shelve_directory(setup_test_environment):
     metadata_file.unlink(missing_ok=True)
     if gitignore_file.exists():
         gitignore_file.unlink()
+    if shelf_yaml_file.exists():
+        shelf_yaml_file.unlink()
 
     # create dummy data
     parent = tmp_path / "example"
@@ -112,6 +124,12 @@ def test_shelve_directory(setup_test_environment):
     with open(gitignore_file, "r") as f:
         assert f"{path}\n" in f.read()
 
+    # check if dataset name is added to shelf.yaml under steps
+    assert shelf_yaml_file.exists()
+    with open(shelf_yaml_file, "r") as f:
+        shelf_yaml = yaml.safe_load(f)
+        assert path in shelf_yaml["steps"]
+
     # clear the data
     shutil.rmtree(data_path)
 
@@ -132,10 +150,13 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
     path = "a/b/c/2024-07-26"
     data_file = tmp_path / "data" / "a" / "b" / "c" / "2024-07-26.txt"
     metadata_file = tmp_path / "data" / "a" / "b" / "c" / "2024-07-26.meta.yaml"
+    shelf_yaml_file = tmp_path / "shelf.yaml"
 
     # make sure files are clear from previous runs
     data_file.unlink(missing_ok=True)
     metadata_file.unlink(missing_ok=True)
+    if shelf_yaml_file.exists():
+        shelf_yaml_file.unlink()
 
     # create dummy file
     new_file = tmp_path / "file1.txt"
@@ -149,6 +170,12 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
     # check for data and metadata
     assert data_file.exists()
     assert metadata_file.exists()
+
+    # check if dataset name is added to shelf.yaml under steps
+    assert shelf_yaml_file.exists()
+    with open(shelf_yaml_file, "r") as f:
+        shelf_yaml = yaml.safe_load(f)
+        assert path in shelf_yaml["steps"]
 
     # re-fetch it from shelf
     data_file.unlink()
@@ -164,11 +191,14 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     path = "a/b/c/latest"
     data_path = tmp_path / "data" / path
     metadata_file = (tmp_path / "data" / path).with_suffix(".meta.yaml")
+    shelf_yaml_file = tmp_path / "shelf.yaml"
 
     # clear from previous runs
     if data_path.exists():
         shutil.rmtree(data_path)
     metadata_file.unlink(missing_ok=True)
+    if shelf_yaml_file.exists():
+        shelf_yaml_file.unlink()
 
     # create dummy data
     parent = tmp_path / "example"
@@ -188,6 +218,12 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     assert data_path.is_dir()
     assert metadata_file.exists()
     assert (data_path / "MANIFEST.yaml").exists()
+
+    # check if dataset name is added to shelf.yaml under steps
+    assert shelf_yaml_file.exists()
+    with open(shelf_yaml_file, "r") as f:
+        shelf_yaml = yaml.safe_load(f)
+        assert path in shelf_yaml["steps"]
 
     # clear the data
     shutil.rmtree(data_path)

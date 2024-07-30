@@ -49,6 +49,9 @@ class Shelf:
         gitignore = self.config.base_dir / ".gitignore"
         append_to_gitignore(gitignore, metadata)
 
+        # Update steps in shelf.yaml
+        self.config.add_step(dataset_name)
+
         return dataset_name
 
     def add_directory_to_shelf(self, file_path: Path, dataset_name: str) -> dict:
@@ -373,6 +376,22 @@ class ShelfConfig:
         schema = _load_schema()
         jsonschema.validate(config, schema)
         return ShelfConfig(config_file, **config)
+
+    def add_step(self, dataset_name: str) -> None:
+        if dataset_name not in self.steps:
+            self.steps.append(dataset_name)
+            self.save()
+
+    def save(self) -> None:
+        with self.config_file.open("w") as ostream:
+            yaml.dump(
+                {
+                    "version": self.version,
+                    "data_dir": self.data_dir,
+                    "steps": self.steps,
+                },
+                ostream,
+            )
 
 
 def _load_schema() -> dict:
