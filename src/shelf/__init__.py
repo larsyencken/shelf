@@ -285,18 +285,13 @@ class Shelf:
         s3.download_file(bucket_name, s3_path, str(dest_path))
 
     def list_datasets(self, regex: Optional[str] = None) -> None:
-        metadata_files = self.walk_metadata_files()
-        suffix = ".meta.yaml"
-        dataset_names = [
-            str(d.relative_to(self.config.abs_data_dir))[: -len(suffix)]
-            for d in metadata_files
-        ]
+        steps = sorted(self.config.steps)
 
         if regex:
             pattern = re.compile(regex)
-            dataset_names = [name for name in dataset_names if pattern.search(name)]
+            steps = [name for name in steps if pattern.search(name)]
 
-        for name in sorted(dataset_names):
+        for name in sorted(steps):
             print(name)
 
     def __iter__(self):
@@ -341,8 +336,7 @@ class Shelf:
         else:
             print("Initializing a new shelf")
             print(f"  CREATE   {shelf_file}")
-            with shelf_file.open("w") as ostream:
-                yaml.dump({"version": 1, "data_dir": "data", "steps": []}, ostream)
+            ShelfConfig.init(shelf_file)
 
         return cls(shelf_file)
 
@@ -352,7 +346,7 @@ class ShelfConfig:
     config_file: Path
     version: int
     data_dir: str
-    steps: list[Union[str, dict]]
+    steps: dict[str, list[str]]
 
     @property
     def abs_data_dir(self) -> Path:
@@ -379,19 +373,28 @@ class ShelfConfig:
 
     def add_step(self, dataset_name: str) -> None:
         if dataset_name not in self.steps:
-            self.steps.append(dataset_name)
+            self.steps[dataset_name] = []
             self.save()
 
     def save(self) -> None:
+        config = {
+            "version": self.version,
+            "data_dir": self.data_dir,
+            "steps": self.steps,
+        }
+        jsonschema.validate(config, _load_schema())
         with self.config_file.open("w") as ostream:
             yaml.dump(
-                {
-                    "version": self.version,
-                    "data_dir": self.data_dir,
-                    "steps": self.steps,
-                },
+                config,
                 ostream,
             )
+
+    @staticmethod
+    def init(shelf_file: Path) -> None:
+        config = {"version": 1, "data_dir": "data", "steps": {}}
+        jsonschema.validate(config, _load_schema())
+        with shelf_file.open("w") as ostream:
+            yaml.dump(config, ostream)
 
 
 def _load_schema() -> dict:

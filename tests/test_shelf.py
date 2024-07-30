@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 from shelf import Shelf  # noqa
 
 BASE = Path(__file__).parent.parent
@@ -319,7 +320,9 @@ def test_get_only_out_of_date_datasets(setup_test_environment):
     shelf.add(str(new_file2), path2)
 
     # modify one of the files to make it out of date
-    data_file1 = tmp_path / "data" / "test_namespace" / "test_dataset1" / "2024-07-26.txt"
+    data_file1 = (
+        tmp_path / "data" / "test_namespace" / "test_dataset1" / "2024-07-26.txt"
+    )
     data_file1.write_text("Modified content")
 
     # restore datasets
@@ -327,7 +330,9 @@ def test_get_only_out_of_date_datasets(setup_test_environment):
 
     # check that only the out-of-date dataset was fetched
     assert data_file1.read_text() == "Hello, World!"
-    data_file2 = tmp_path / "data" / "test_namespace" / "test_dataset2" / "2024-07-27.txt"
+    data_file2 = (
+        tmp_path / "data" / "test_namespace" / "test_dataset2" / "2024-07-27.txt"
+    )
     assert data_file2.read_text() == "Hello, Cosmos!"
 
 
@@ -349,7 +354,9 @@ def test_get_with_force_option(setup_test_environment):
     shelf.add(str(new_file2), path2)
 
     # modify one of the files to make it out of date
-    data_file1 = tmp_path / "data" / "test_namespace" / "test_dataset1" / "2024-07-26.txt"
+    data_file1 = (
+        tmp_path / "data" / "test_namespace" / "test_dataset1" / "2024-07-26.txt"
+    )
     data_file1.write_text("Modified content")
 
     # restore datasets with --force option
@@ -357,5 +364,7 @@ def test_get_with_force_option(setup_test_environment):
 
     # check that both datasets were fetched
     assert data_file1.read_text() == "Hello, World!"
-    data_file2 = tmp_path / "data" / "test_namespace" / "test_dataset2" / "2024-07-27.txt"
+    data_file2 = (
+        tmp_path / "data" / "test_namespace" / "test_dataset2" / "2024-07-27.txt"
+    )
     assert data_file2.read_text() == "Hello, Cosmos!"
