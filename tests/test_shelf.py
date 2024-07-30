@@ -74,7 +74,7 @@ def test_add_file(setup_test_environment):
     assert shelf_yaml_file.exists()
     with open(shelf_yaml_file, "r") as f:
         shelf_yaml = yaml.safe_load(f)
-        assert path in shelf_yaml["steps"]
+        assert f"snapshot://{path}" in shelf_yaml["steps"]
 
     # re-fetch it from shelf
     data_file.unlink()
@@ -129,7 +129,7 @@ def test_shelve_directory(setup_test_environment):
     assert shelf_yaml_file.exists()
     with open(shelf_yaml_file, "r") as f:
         shelf_yaml = yaml.safe_load(f)
-        assert path in shelf_yaml["steps"]
+        assert f"snapshot://{path}" in shelf_yaml["steps"]
 
     # clear the data
     shutil.rmtree(data_path)
@@ -176,7 +176,7 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
     assert shelf_yaml_file.exists()
     with open(shelf_yaml_file, "r") as f:
         shelf_yaml = yaml.safe_load(f)
-        assert path in shelf_yaml["steps"]
+        assert f"snapshot://{path}" in shelf_yaml["steps"]
 
     # re-fetch it from shelf
     data_file.unlink()
@@ -224,7 +224,7 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     assert shelf_yaml_file.exists()
     with open(shelf_yaml_file, "r") as f:
         shelf_yaml = yaml.safe_load(f)
-        assert path in shelf_yaml["steps"]
+        assert f"snapshot://{path}" in shelf_yaml["steps"]
 
     # clear the data
     shutil.rmtree(data_path)
@@ -267,8 +267,8 @@ def test_list_datasets(setup_test_environment):
 
     output = captured_output.getvalue().strip().split("\n")
     assert output == [
-        "test_namespace/test_dataset1/2024-07-26",
-        "test_namespace/test_dataset2/2024-07-27",
+        "snapshot://test_namespace/test_dataset1/2024-07-26",
+        "snapshot://test_namespace/test_dataset2/2024-07-27",
     ]
 
 
@@ -299,7 +299,7 @@ def test_list_datasets_with_regex(setup_test_environment):
     sys.stdout = sys.__stdout__
 
     output = captured_output.getvalue().strip().split("\n")
-    assert output == ["test_namespace/test_dataset1/2024-07-26"]
+    assert output == ["snapshot://test_namespace/test_dataset1/2024-07-26"]
 
 
 def test_get_only_out_of_date_datasets(setup_test_environment):

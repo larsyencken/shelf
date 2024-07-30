@@ -30,6 +30,7 @@ class Shelf:
     def add(self, file_path: Union[str, Path], dataset_name: str, edit=False) -> str:
         file_path = Path(file_path)
         dataset_name = self._process_dataset_name(dataset_name)
+        step_name = f"snapshot://{dataset_name}"
 
         print(f"Shelving: {file_path}")
         print(f"  CREATE   data/{dataset_name}.meta.json")
@@ -50,7 +51,7 @@ class Shelf:
         append_to_gitignore(gitignore, metadata)
 
         # Update steps in shelf.yaml
-        self.config.add_step(dataset_name)
+        self.config.add_step(step_name)
 
         return dataset_name
 
@@ -174,15 +175,17 @@ class Shelf:
         )
 
     def get(self, path: Optional[str] = None, force: bool = False) -> None:
-        datasets = self.walk_metadata_files()
+        steps = sorted(self.config.steps)
         if path:
             regex = re.compile(path)
-            datasets = [d for d in datasets if regex.search(str(d))]
+            steps = [s for s in steps if regex.search(str(s))]
 
-        if not datasets:
+        if not steps:
             raise KeyError(f"No datasets found for path: {path}")
 
-        for metadata_file in datasets:
+        for step in steps:
+            assert step.startswith("snapshot://")
+            metadata_file = Path(f'data/{step.split("//")[1]}.meta.yaml')
             self.restore_dataset(metadata_file, force)
 
     def walk_metadata_files(self) -> list[Path]:
@@ -199,7 +202,7 @@ class Shelf:
 
         dataset_name = metadata["dataset_name"]
 
-        print(dataset_name)
+        print(f"snapshot://{dataset_name}")
 
         data_path = Path(str(metadata_file).replace(".meta.yaml", ""))
         if metadata.get("type") == "directory":
