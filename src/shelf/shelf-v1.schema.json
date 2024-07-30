@@ -13,28 +13,21 @@
       "default": "data"
     },
     "steps": {
-      "type": "array",
+      "type": "object",
       "description": "List of available steps to run",
-      "items": {
-        "anyOf": [
-          {
+      "patternProperties": {
+        "^snapshot://": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "^table://": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
             "type": "string",
-            "description": "Name of the step",
             "pattern": "(snapshot|table)://[a-z0-9-/]+$"
-          },
-          {
-            "type": "object",
-            "patternProperties": {
-              "^table://[a-z0-9-/]+$": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "(snapshot|table)://[a-z0-9-/]+$"
-                }
-              }
-            }
           }
-        ]
+        }
       }
     }
   }
