@@ -128,7 +128,11 @@ def test_shelve_directory(setup_test_environment):
     # check the right local files are created
     assert data_path.is_dir()
     assert metadata_file.exists()
-    assert (data_path / "MANIFEST.yaml").exists()
+
+    # check if manifest is present in metadata
+    with open(metadata_file, "r") as f:
+        metadata = yaml.safe_load(f)
+        assert "manifest" in metadata
 
     # check if data path is added to .gitignore
     assert gitignore_file.exists()
@@ -151,7 +155,6 @@ def test_shelve_directory(setup_test_environment):
     assert data_path.is_dir()
     assert (data_path / "file1.txt").exists()
     assert (data_path / "file2.txt").exists()
-    assert (data_path / "MANIFEST.yaml").exists()
 
 
 def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
@@ -230,7 +233,11 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     # check the right local files are created
     assert data_path.is_dir()
     assert metadata_file.exists()
-    assert (data_path / "MANIFEST.yaml").exists()
+
+    # check if manifest is present in metadata
+    with open(metadata_file, "r") as f:
+        metadata = yaml.safe_load(f)
+        assert "manifest" in metadata
 
     # check if dataset name is added to shelf.yaml under steps
     assert shelf_yaml_file.exists()
@@ -248,7 +255,6 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     assert data_path.is_dir()
     assert (data_path / "file1.txt").exists()
     assert (data_path / "file2.txt").exists()
-    assert (data_path / "MANIFEST.yaml").exists()
 
 
 def test_list_datasets(setup_test_environment):

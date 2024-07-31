@@ -67,20 +67,11 @@ class Shelf:
         # shelve directory contents
         checksums = self.add_directory_to_s3(data_path)
 
-        # Save manifest file
-        manifest_file = data_path / "MANIFEST.yaml"
-        with open(manifest_file, "w") as f:
-            yaml.dump(checksums, f)
-
-        # Upload manifest file to S3
-        manifest_checksum = self.generate_checksum(manifest_file)
-        self.add_to_s3(manifest_file, manifest_checksum)
-
         # Create metadata record
         metadata = {
             "dataset_name": dataset_name,
             "type": "directory",
-            "manifest": manifest_checksum,
+            "manifest": checksums,
         }
 
         # Save metadata record to YAML file
@@ -224,12 +215,9 @@ class Shelf:
             if data_path.exists():
                 shutil.rmtree(data_path)
             data_path.mkdir()
-            manifest_file = data_path / "MANIFEST.yaml"
-            self.fetch_from_s3(metadata["manifest"], manifest_file)
 
             # load its records
-            with open(manifest_file, "r") as f:
-                manifest = yaml.safe_load(f)
+            manifest = metadata["manifest"]
 
             # fetch each file it mentions
             for item in manifest:
@@ -244,15 +232,7 @@ class Shelf:
                 self.fetch_from_s3(item["checksum"], file_path)
 
     def is_directory_up_to_date(self, metadata: dict, data_path: Path) -> bool:
-        manifest_file = data_path / "MANIFEST.yaml"
-        if not manifest_file.exists():
-            return False
-
-        if self.generate_checksum(manifest_file) != metadata["manifest"]:
-            return False
-
-        with open(manifest_file, "r") as f:
-            manifest = yaml.safe_load(f)
+        manifest = metadata["manifest"]
 
         for item in manifest:
             file_path = data_path / item["path"]
