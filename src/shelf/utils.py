@@ -2,6 +2,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Union
 
+from shelf.console import console
 from shelf.types import Checksum, Manifest
 
 IGNORE_FILES = {".DS_Store"}
@@ -44,4 +45,4 @@ def checksum_manifest(manifest: Manifest) -> Checksum:
 
 
 def print_op(type_: str, message: Any) -> None:
-    print(f"{type_:>15}   {message}")
+    console.print(f"[blue]{type_:>15}[/blue]   {message}")

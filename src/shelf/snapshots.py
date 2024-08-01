@@ -56,11 +56,10 @@ class Snapshot:
     def load(path: str) -> "Snapshot":
         metadata_file = (SNAPSHOT_DIR / path).with_suffix(".meta.yaml")
 
-        with metadata_file.open("r") as f:
-            metadata = yaml.safe_load(f)
-            if "date_accessed" in metadata:
-                metadata["date_accessed"] = str(metadata["date_accessed"])
-            jsonschema.validate(metadata, METADATA_SCHEMA)
+        metadata = yaml.safe_load(metadata_file.read_text())
+        if "date_accessed" in metadata:
+            metadata["date_accessed"] = str(metadata["date_accessed"])
+        jsonschema.validate(metadata, METADATA_SCHEMA)
 
         metadata["uri"] = StepURI.parse(metadata["uri"])
 
@@ -108,8 +107,7 @@ class Snapshot:
             print_op("UPDATE", self.metadata_path)
 
         self.metadata_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.metadata_path.open("w") as f:
-            yaml.safe_dump(record, f)
+        self.metadata_path.write_text(yaml.safe_dump(record))
 
     def to_dict(self) -> dict:
         record = asdict(self)
@@ -184,7 +182,7 @@ def add_to_s3(file_path: Union[str, Path], checksum: Checksum) -> None:
     )
     bucket_name = os.getenv("S3_BUCKET_NAME")
     dest_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
-    print_op("UPLOAD", f"{file_path} --> s3://{bucket_name}/{dest_path}")
+    print_op("UPLOAD", file_path)
     s3.upload_file(file_path, bucket_name, str(dest_path))
 
 
@@ -230,7 +228,7 @@ def download_file(s3_path: str, dest_path: Path) -> None:
 
     print_op(
         "DOWNLOAD",
-        f"s3://{bucket_name}/{s3_path} --> {dest_path_rel}",
+        dest_path_rel,
     )
 
     s3.download_file(bucket_name, s3_path, str(dest_path))
