@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from shelf import Shelf, list_steps, plan_and_run, snapshot_to_shelf, audit_shelf
+from shelf import Shelf, audit_shelf, list_steps, plan_and_run, snapshot_to_shelf
 from shelf.paths import BASE_DIR
 from shelf.types import StepURI
 from shelf.utils import checksum_folder  # noqa
@@ -394,7 +394,6 @@ def test_audit_command(setup_test_environment):
     path = "test_namespace/test_dataset/latest"
     data_path = tmp_path / "data/snapshots/" / path
     metadata_file = (tmp_path / "data/snapshots" / path).with_suffix(".meta.yaml")
-    shelf_yaml_file = tmp_path / "shelf.yaml"
 
     # create dummy data
     local_data_dir = tmp_path / "example"
@@ -417,12 +416,13 @@ def test_audit_command(setup_test_environment):
         assert metadata.get("manifest")
 
     # modify the checksum in the metadata to simulate an incorrect checksum
+    correct_checksum = metadata["checksum"]
     metadata["checksum"] = "incorrectchecksum"
     with open(metadata_file, "w") as f:
         yaml.safe_dump(metadata, f)
 
     # run the audit command
-    from shelf import audit_shelf
+
     audit_shelf(shelf, fix=False)
 
     # check that the audit command detected the incorrect checksum
@@ -436,5 +436,4 @@ def test_audit_command(setup_test_environment):
     # check that the audit command fixed the incorrect checksum
     with open(metadata_file, "r") as f:
         metadata = yaml.safe_load(f)
-        assert metadata["checksum"] != "incorrectchecksum"
-        assert metadata["checksum"] == shelf.steps[StepURI("snapshot", path)][0].checksum
+        assert metadata["checksum"] == correct_checksum

@@ -12,7 +12,7 @@ from shelf.core import Shelf
 from shelf.paths import BASE_DIR
 from shelf.snapshots import Snapshot
 from shelf.types import StepURI
-from shelf.utils import print_op, checksum_manifest
+from shelf.utils import checksum_manifest, print_op
 
 load_dotenv()
 
@@ -175,27 +175,35 @@ def plan_and_run(
 
 def audit_shelf(shelf: Shelf, fix: bool = False) -> None:
     for step in shelf.steps:
-        if step.scheme == "snapshot":
-            snapshot = Snapshot.load(step.path)
-            if snapshot.snapshot_type == "directory":
-                manifest = snapshot.manifest
-                if manifest:
-                    calculated_checksum = checksum_manifest(manifest)
-                    if calculated_checksum != snapshot.checksum:
-                        print(f"Checksum mismatch for {step}: {snapshot.checksum} != {calculated_checksum}")
-                        if fix:
-                            print(f"Fixing checksum for {step}")
-                            snapshot.checksum = calculated_checksum
-                            snapshot.save()
-                        else:
-                            exit(1)
-                else:
-                    print(f"No manifest found for {step}")
-                    exit(1)
-            else:
-                print(f"Skipping non-directory snapshot {step}")
+        audit_step(step, fix)
+
+
+def audit_step(step: StepURI, fix: bool = False) -> None:
+    if step.scheme != "snapshot":
+        print(f"Skipping non-snapshot step {step}")
+        return
+
+    snapshot = Snapshot.load(step.path)
+    if snapshot.snapshot_type != "directory":
+        print(f"Skipping non-directory snapshot {step}")
+        return
+
+    manifest = snapshot.manifest
+    if not manifest:
+        print(f"No manifest found for {step}")
+        exit(1)
+
+    calculated_checksum = checksum_manifest(manifest)
+    if calculated_checksum != snapshot.checksum:
+        print(
+            f"Checksum mismatch for {step}: {snapshot.checksum} != {calculated_checksum}"
+        )
+        if fix:
+            print(f"Fixing checksum for {step}")
+            snapshot.checksum = calculated_checksum
+            snapshot.save()
         else:
-            print(f"Skipping non-snapshot step {step}")
+            exit(1)
 
 
 def _maybe_add_version(dataset_name: str) -> str:

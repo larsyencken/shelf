@@ -36,6 +36,7 @@ class Snapshot:
     source_name: Optional[str] = None
     source_url: Optional[str] = None
     date_accessed: Optional[str] = None
+    access_notes: Optional[str] = None
 
     @property
     def path(self):
@@ -57,6 +58,8 @@ class Snapshot:
 
         with metadata_file.open("r") as f:
             metadata = yaml.safe_load(f)
+            if "date_accessed" in metadata:
+                metadata["date_accessed"] = str(metadata["date_accessed"])
             jsonschema.validate(metadata, METADATA_SCHEMA)
 
         metadata["uri"] = StepURI.parse(metadata["uri"])
