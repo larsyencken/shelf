@@ -17,7 +17,7 @@ help:
 # Run unittests with pytest
 unittest: .venv
 	@echo "==> Running unit tests"
-	@rye test
+	@rye test -- --sw
 
 # Reformat using rye
 format: .venv
