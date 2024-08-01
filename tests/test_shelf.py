@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from shelf import Shelf, list_steps, plan_and_run, snapshot_to_shelf
+from shelf import Shelf, list_steps, plan_and_run, snapshot_to_shelf, audit_shelf
 from shelf.paths import BASE_DIR
 from shelf.types import StepURI
 from shelf.utils import checksum_folder  # noqa
@@ -385,3 +385,56 @@ def test_get_with_force_option(setup_test_environment):
         / "2024-07-27.txt"
     )
     assert data_file2.read_text() == "Hello, Cosmos!"
+
+
+def test_audit_command(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    path = "test_namespace/test_dataset/latest"
+    data_path = tmp_path / "data/snapshots/" / path
+    metadata_file = (tmp_path / "data/snapshots" / path).with_suffix(".meta.yaml")
+    shelf_yaml_file = tmp_path / "shelf.yaml"
+
+    # create dummy data
+    local_data_dir = tmp_path / "example"
+    local_data_dir.mkdir()
+    (local_data_dir / "file1.txt").write_text("Hello, World!")
+    (local_data_dir / "file2.txt").write_text("Hello, Cosmos!")
+
+    # add to shelf
+    os.chdir(tmp_path)
+    shelf = Shelf.init()
+    snapshot_to_shelf(local_data_dir, path)
+
+    # check the right local files are created
+    assert data_path.is_dir()
+    assert metadata_file.exists()
+
+    # check if manifest is present in metadata
+    with open(metadata_file, "r") as f:
+        metadata = yaml.safe_load(f)
+        assert metadata.get("manifest")
+
+    # modify the checksum in the metadata to simulate an incorrect checksum
+    metadata["checksum"] = "incorrectchecksum"
+    with open(metadata_file, "w") as f:
+        yaml.safe_dump(metadata, f)
+
+    # run the audit command
+    from shelf import audit_shelf
+    audit_shelf(shelf, fix=False)
+
+    # check that the audit command detected the incorrect checksum
+    with open(metadata_file, "r") as f:
+        metadata = yaml.safe_load(f)
+        assert metadata["checksum"] == "incorrectchecksum"
+
+    # run the audit command with --fix option
+    audit_shelf(shelf, fix=True)
+
+    # check that the audit command fixed the incorrect checksum
+    with open(metadata_file, "r") as f:
+        metadata = yaml.safe_load(f)
+        assert metadata["checksum"] != "incorrectchecksum"
+        assert metadata["checksum"] == shelf.steps[StepURI("snapshot", path)][0].checksum

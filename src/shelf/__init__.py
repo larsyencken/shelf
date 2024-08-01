@@ -12,7 +12,7 @@ from shelf.core import Shelf
 from shelf.paths import BASE_DIR
 from shelf.snapshots import Snapshot
 from shelf.types import StepURI
-from shelf.utils import print_op
+from shelf.utils import print_op, checksum_manifest
 
 load_dotenv()
 
@@ -74,6 +74,15 @@ def main():
         "init", help="Initialize the shelf with the necessary directories"
     )
 
+    audit_parser = subparsers.add_parser(
+        "audit", help="Audit the shelf metadata and validate the metadata of every step"
+    )
+    audit_parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Fix the overall checksum for snapshot steps with snapshot_type of directory if it is wrong",
+    )
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -91,6 +100,9 @@ def main():
 
     elif args.command == "run":
         return plan_and_run(shelf, args.path, args.force)
+
+    elif args.command == "audit":
+        return audit_shelf(shelf, args.fix)
 
     parser.print_help()
 
@@ -159,6 +171,31 @@ def plan_and_run(
         dag = steps.prune_completed(dag)
 
     steps.execute_dag(dag, dry_run=dry_run)
+
+
+def audit_shelf(shelf: Shelf, fix: bool = False) -> None:
+    for step in shelf.steps:
+        if step.scheme == "snapshot":
+            snapshot = Snapshot.load(step.path)
+            if snapshot.snapshot_type == "directory":
+                manifest = snapshot.manifest
+                if manifest:
+                    calculated_checksum = checksum_manifest(manifest)
+                    if calculated_checksum != snapshot.checksum:
+                        print(f"Checksum mismatch for {step}: {snapshot.checksum} != {calculated_checksum}")
+                        if fix:
+                            print(f"Fixing checksum for {step}")
+                            snapshot.checksum = calculated_checksum
+                            snapshot.save()
+                        else:
+                            exit(1)
+                else:
+                    print(f"No manifest found for {step}")
+                    exit(1)
+            else:
+                print(f"Skipping non-directory snapshot {step}")
+        else:
+            print(f"Skipping non-snapshot step {step}")
 
 
 def _maybe_add_version(dataset_name: str) -> str:
