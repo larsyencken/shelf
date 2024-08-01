@@ -1,19 +1,18 @@
 import argparse
-import hashlib
-import os
 import re
-import shutil
 import subprocess
-import sys
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
-import boto3
-import jsonschema
-import yaml
 from dotenv import load_dotenv
+
+from shelf import steps
+from shelf.core import Shelf
+from shelf.paths import BASE_DIR
+from shelf.snapshots import Snapshot
+from shelf.types import StepURI
+from shelf.utils import print_op
 
 load_dotenv()
 
@@ -21,371 +20,6 @@ load_dotenv()
 BLACKLIST = [".DS_Store"]
 
 SCHEMA_PATH = Path(__file__).parent / "shelf-v1.schema.json"
-
-
-class Shelf:
-    def __init__(self, config_file: Optional[Path] = None):
-        self.config = ShelfConfig.detect(config_file)
-
-    def add(self, file_path: Union[str, Path], dataset_name: str, edit=False) -> str:
-        file_path = Path(file_path)
-        dataset_name = self._process_dataset_name(dataset_name)
-        step_name = f"snapshot://{dataset_name}"
-
-        print(f"Shelving: {file_path}")
-        print(f"  CREATE   data/snapshots/{dataset_name}.meta.json")
-        if file_path.is_dir():
-            metadata = self.add_directory_to_shelf(file_path, dataset_name)
-        else:
-            metadata = self.add_file_to_shelf(file_path, dataset_name)
-
-        # Save metadata record to YAML file
-        metadata_file = self.save_metadata(metadata, dataset_name)
-
-        # Open metadata file in interactive editor
-        if edit and sys.stdout.isatty():
-            self.open_in_editor(metadata_file)
-
-        # Append data path to .gitignore
-        gitignore = self.config.base_dir / ".gitignore"
-        append_to_gitignore(gitignore, metadata)
-
-        # Update steps in shelf.yaml
-        self.config.add_step(step_name)
-
-        return dataset_name
-
-    def add_directory_to_shelf(self, file_path: Path, dataset_name: str) -> dict:
-        # copy directory to data/
-        data_path = self.config.abs_data_dir / "snapshots" / dataset_name
-        data_path.parent.mkdir(parents=True, exist_ok=True)
-        print(
-            f"  COPY     {file_path}/ --> {data_path.relative_to(self.config.base_dir)}/"
-        )
-        shutil.copytree(file_path, data_path)
-
-        # shelve directory contents
-        checksums = self.add_directory_to_s3(data_path)
-
-        # Create metadata record
-        metadata = {
-            "dataset_name": dataset_name,
-            "type": "directory",
-            "manifest": checksums,
-        }
-
-        # Save metadata record to YAML file
-        self.save_metadata(metadata, dataset_name)
-
-        return metadata
-
-    def add_directory_to_s3(self, file_path):
-        checksums = []
-        for root, dirs, files in os.walk(file_path):
-            for file in files:
-                if file in BLACKLIST:
-                    continue
-
-                file_full_path = os.path.join(root, file)
-                checksum = self.generate_checksum(file_full_path)
-                self.add_to_s3(file_full_path, checksum)
-                checksums.append(
-                    {
-                        "path": os.path.relpath(file_full_path, file_path),
-                        "checksum": checksum,
-                    }
-                )
-
-        return sorted(checksums, key=lambda x: x["path"])
-
-    def add_file_to_shelf(self, file_path: Path, dataset_name: str) -> dict:
-        # Generate checksum for the file
-        checksum = self.generate_checksum(file_path)
-
-        # Upload file to S3-compatible store
-        self.add_to_s3(file_path, checksum)
-
-        # Copy file to data directory
-        self.copy_to_data_dir(file_path, dataset_name)
-
-        # Create metadata record
-        metadata = {
-            "type": "file",
-            "dataset_name": dataset_name,
-            "checksum": checksum,
-            "extension": os.path.splitext(file_path)[1],
-        }
-        return metadata
-
-    def generate_checksum(self, file_path: Union[str, Path]) -> str:
-        sha256 = hashlib.sha256()
-
-        with open(file_path, "rb") as f:
-            for block in iter(lambda: f.read(4096), b""):
-                sha256.update(block)
-
-        return sha256.hexdigest()
-
-    def add_to_s3(self, file_path: Union[str, Path], checksum: str) -> None:
-        s3 = boto3.client(
-            "s3",
-            aws_access_key_id=os.getenv("S3_ACCESS_KEY"),
-            aws_secret_access_key=os.getenv("S3_SECRET_KEY"),
-            endpoint_url=os.getenv("S3_ENDPOINT_URL"),
-        )
-        bucket_name = os.getenv("S3_BUCKET_NAME")
-        dest_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
-        print(f"  UPLOAD   {file_path} --> s3://{bucket_name}/{dest_path}")
-        s3.upload_file(file_path, bucket_name, str(dest_path))
-
-    def save_metadata(self, metadata: dict, dataset_name: str) -> Path:
-        metadata_dir = self.config.abs_data_dir / "snapshots" / dataset_name
-        metadata_dir.parent.mkdir(parents=True, exist_ok=True)
-
-        metadata_file = metadata_dir.with_suffix(".meta.yaml")
-
-        with open(metadata_file, "w") as f:
-            yaml.dump(metadata, f)
-
-        return metadata_file
-
-    def open_in_editor(self, file_path: Path) -> None:
-        editor = os.getenv("EDITOR", "vim")
-        subprocess.run([editor, file_path])
-
-    def copy_to_data_dir(self, file_path: Path, dataset_name: str) -> None:
-        data_dir = self.config.abs_data_dir / "snapshots" / dataset_name
-        data_dir.parent.mkdir(parents=True, exist_ok=True)
-
-        assert not Path(file_path).is_dir()
-
-        data_file = data_dir.with_suffix(file_path.suffix)
-        shutil.copy2(file_path, data_file)
-        print(
-            f"  COPY     {file_path} --> {data_file.relative_to(self.config.base_dir)}"
-        )
-
-    def get(self, path: Optional[str] = None, force: bool = False) -> None:
-        steps = sorted(self.config.steps)
-        if path:
-            regex = re.compile(path)
-            steps = [s for s in steps if regex.search(str(s))]
-
-        if not steps:
-            raise KeyError(f"No datasets found for path: {path}")
-
-        for step in steps:
-            assert step.startswith("snapshot://")
-            metadata_file = Path(f'data/snapshots/{step.split("//")[1]}.meta.yaml')
-            self.restore_dataset(metadata_file, force)
-
-    def restore_dataset(self, metadata_file: Path, force: bool = False) -> None:
-        with open(metadata_file, "r") as f:
-            metadata = yaml.safe_load(f)
-
-        dataset_name = metadata["dataset_name"]
-
-        print(f"snapshot://{dataset_name}")
-
-        data_path = Path(str(metadata_file).replace(".meta.yaml", ""))
-        if metadata.get("type") == "directory":
-            self.restore_directory(metadata, data_path, force)
-        else:
-            self.restore_file(metadata, data_path, force)
-
-    def restore_file(
-        self, metadata: dict, data_path: Path, force: bool = False
-    ) -> None:
-        file_extension = metadata["extension"]
-        dest_file = data_path.with_suffix(file_extension)
-        if (
-            force
-            or not dest_file.exists()
-            or self.generate_checksum(dest_file) != metadata["checksum"]
-        ):
-            self.fetch_from_s3(metadata["checksum"], dest_file)
-
-    def restore_directory(self, metadata: dict, data_path: Path, force: bool = False):
-        # fetch the manifest
-        if (
-            force
-            or not data_path.exists()
-            or not self.is_directory_up_to_date(metadata, data_path)
-        ):
-            if data_path.exists():
-                shutil.rmtree(data_path)
-            data_path.mkdir()
-
-            # load its records
-            manifest = metadata["manifest"]
-
-            # fetch each file it mentions
-            for item in manifest:
-                file_path = data_path / item["path"]
-
-                # let's not shoot ourselves in the foot and go writing anywhere in the filesystem
-                if not file_path.resolve().is_relative_to(data_path.resolve()):
-                    raise Exception(
-                        f'manifest contains path {item["path"]} outside the destination directory {data_path}'
-                    )
-
-                self.fetch_from_s3(item["checksum"], file_path)
-
-    def is_directory_up_to_date(self, metadata: dict, data_path: Path) -> bool:
-        manifest = metadata["manifest"]
-
-        for item in manifest:
-            file_path = data_path / item["path"]
-            if (
-                not file_path.exists()
-                or self.generate_checksum(file_path) != item["checksum"]
-            ):
-                return False
-
-        return True
-
-    def fetch_from_s3(self, checksum: str, dest_path: Path) -> None:
-        s3 = boto3.client(
-            "s3",
-            aws_access_key_id=os.getenv("S3_ACCESS_KEY"),
-            aws_secret_access_key=os.getenv("S3_SECRET_KEY"),
-            endpoint_url=os.getenv("S3_ENDPOINT_URL"),
-        )
-        bucket_name = os.getenv("S3_BUCKET_NAME")
-        assert bucket_name
-        s3_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
-        print(
-            f"  FETCH    s3://{bucket_name}/{s3_path} --> {dest_path.resolve().relative_to(self.config.base_dir)}"
-        )
-        s3.download_file(bucket_name, s3_path, str(dest_path))
-
-    def list_datasets(self, regex: Optional[str] = None) -> None:
-        steps = sorted(self.config.steps)
-
-        if regex:
-            pattern = re.compile(regex)
-            steps = [name for name in steps if pattern.search(name)]
-
-        for name in sorted(steps):
-            print(name)
-
-    def __iter__(self):
-        yield from sorted(self.config.steps)
-
-    def __getitem__(self, dataset_path: str):
-        metadata_file = self.config.abs_data_dir / f"{dataset_path}.meta.yaml"
-        if not metadata_file.exists():
-            raise KeyError(f"No dataset found for path: {dataset_path}")
-        with open(metadata_file, "r") as f:
-            metadata = yaml.safe_load(f)
-        return metadata
-
-    def _process_dataset_name(self, dataset_name: str) -> str:
-        parts = dataset_name.split("/")
-
-        if self._is_valid_version(parts[-1]):
-            if len(parts) == 1:
-                raise Exception("a dataset must have a name as well as a version")
-
-            # the final segment is a version, all good
-            return dataset_name
-
-        # add a version to the end
-        parts.append(datetime.today().strftime("%Y-%m-%d"))
-
-        return "/".join(parts)
-
-    def _is_valid_version(self, version: str) -> bool:
-        return bool(re.match(r"\d{4}-\d{2}-\d{2}", version)) or version == "latest"
-
-    @classmethod
-    def init(cls, path: Optional[Path] = None) -> "Shelf":
-        if not path:
-            path = Path(".")
-
-        shelf_file = path / "shelf.yaml"
-        if shelf_file.exists():
-            print("Detected existing shelf.yaml file")
-        else:
-            print("Initializing a new shelf")
-            print(f"  CREATE   {shelf_file}")
-            ShelfConfig.init(shelf_file)
-
-        return cls(shelf_file)
-
-
-@dataclass
-class ShelfConfig:
-    config_file: Path
-    version: int
-    data_dir: str
-    steps: dict[str, list[str]]
-
-    @property
-    def abs_data_dir(self) -> Path:
-        return (self.config_file.parent / self.data_dir).resolve()
-
-    @property
-    def base_dir(self) -> Path:
-        return self.config_file.parent.resolve()
-
-    @staticmethod
-    def detect(config_file: Optional[Path] = None) -> "ShelfConfig":
-        if not config_file:
-            config_file = Path("shelf.yaml")
-
-        if not config_file.exists():
-            raise FileNotFoundError("No shelf.yaml file found in the current directory")
-
-        with config_file.open("r") as istream:
-            config = yaml.safe_load(istream)
-
-        schema = _load_schema()
-        jsonschema.validate(config, schema)
-        return ShelfConfig(config_file, **config)
-
-    def add_step(self, dataset_name: str) -> None:
-        if dataset_name not in self.steps:
-            self.steps[dataset_name] = []
-            self.save()
-
-    def save(self) -> None:
-        config = {
-            "version": self.version,
-            "data_dir": self.data_dir,
-            "steps": self.steps,
-        }
-        jsonschema.validate(config, _load_schema())
-        with self.config_file.open("w") as ostream:
-            yaml.dump(
-                config,
-                ostream,
-            )
-
-    @staticmethod
-    def init(shelf_file: Path) -> None:
-        config = {"version": 1, "data_dir": "data", "steps": {}}
-        jsonschema.validate(config, _load_schema())
-        with shelf_file.open("w") as ostream:
-            yaml.dump(config, ostream)
-
-
-def _load_schema() -> dict:
-    with open(SCHEMA_PATH, "r") as istream:
-        return yaml.safe_load(istream)
-
-
-def append_to_gitignore(gitignore_path: Path, metadata: dict) -> None:
-    if not gitignore_path.exists():
-        print("  CREATE  .gitignore")
-
-    relative_data_path = f"data/snapshots/{metadata['dataset_name']}"
-    if metadata["type"] == "file":
-        relative_data_path += metadata["extension"]
-
-    with open(gitignore_path, "a") as f:
-        f.write(f"{relative_data_path}\n")
-    print(f"  APPEND   {relative_data_path} to .gitignore")
 
 
 def main():
@@ -411,19 +45,19 @@ def main():
         help="Edit the metadata file in an interactive editor.",
     )
 
-    get_parser = subparsers.add_parser(
-        "get", help="Fetch and unpack data from the content store"
+    run_parser = subparsers.add_parser(
+        "run", help="Execute any outstanding steps in the DAG"
     )
-    get_parser.add_argument(
+    run_parser.add_argument(
         "path",
         type=str,
         nargs="?",
-        help="Optional regex to match against metadata path names",
+        help="Optional regex to match against step names",
     )
-    get_parser.add_argument(
+    run_parser.add_argument(
         "--force",
         action="store_true",
-        help="Re-fetch datasets regardless of their up-to-date status",
+        help="Force re-build of steps",
     )
 
     list_parser = subparsers.add_parser(
@@ -443,18 +77,117 @@ def main():
     args = parser.parse_args()
 
     if args.command == "init":
-        Shelf.init()
-        return
+        return init_shelf()
 
     shelf = Shelf()
 
-    if args.command == "add":
-        return shelf.add(args.file_path, args.dataset_name, edit=args.edit)
-
-    elif args.command == "get":
-        return shelf.get(args.path, args.force)
+    if args.command == "snapshot":
+        return snapshot_to_shelf(
+            Path(args.file_path), args.dataset_name, edit=args.edit
+        )
 
     elif args.command == "list":
-        return shelf.list_datasets(args.regex)
+        return list_steps_cmd(shelf, args.regex)
+
+    elif args.command == "run":
+        return plan_and_run(shelf, args.path, args.force)
 
     parser.print_help()
+
+
+def init_shelf() -> None:
+    print("Initializing shelf")
+    Shelf.init()
+
+
+def snapshot_to_shelf(
+    file_path: Path, dataset_name: str, edit: bool = False
+) -> Snapshot:
+    # ensure we are tagging a version on everything
+    dataset_name = _maybe_add_version(dataset_name)
+
+    # sanity check that it does not exist
+    shelf = Shelf()
+    proposed_uri = StepURI("snapshot", dataset_name)
+    if proposed_uri in shelf.steps:
+        raise ValueError("Dataset already exists in shelf: {proposed_uri}")
+
+    # create and add to s3
+    print(f"Creating {proposed_uri}")
+    snapshot = Snapshot.create(file_path, dataset_name)
+
+    # ensure that the data itself does not enter git
+    _add_to_gitignore(snapshot.path)
+
+    if edit:
+        subprocess.run(["vim", snapshot.metadata_path])
+
+    shelf.steps[proposed_uri] = []
+    shelf.save()
+
+    return snapshot
+
+
+def list_steps_cmd(shelf: Shelf, regex: Optional[str] = None) -> None:
+    for step in list_steps(shelf, regex):
+        print(step)
+
+
+def list_steps(shelf: Shelf, regex: Optional[str] = None) -> list[StepURI]:
+    steps = sorted(shelf.steps)
+
+    if regex:
+        steps = [s for s in steps if re.search(regex, str(s))]
+
+    return steps
+
+
+def plan_and_run(
+    shelf: Shelf,
+    regex: Optional[str] = None,
+    force: bool = False,
+    dry_run: bool = False,
+) -> None:
+    # to help unit testing
+    shelf.refresh()
+
+    dag = shelf.steps
+    if regex:
+        dag = steps.prune_with_regex(dag, regex)
+
+    if not force:
+        dag = steps.prune_completed(dag)
+
+    steps.execute_dag(dag, dry_run=dry_run)
+
+
+def _maybe_add_version(dataset_name: str) -> str:
+    parts = dataset_name.split("/")
+
+    if _is_valid_version(parts[-1]):
+        if len(parts) == 1:
+            raise Exception("invalid dataset name")
+
+        # the final segment is a version, all good
+        return dataset_name
+
+    # add a version to the end
+    parts.append(datetime.today().strftime("%Y-%m-%d"))
+
+    return "/".join(parts)
+
+
+def _is_valid_version(version: str) -> bool:
+    return bool(re.match(r"\d{4}-\d{2}-\d{2}", version)) or version == "latest"
+
+
+def _add_to_gitignore(path: Path) -> None:
+    gitignore = Path(".gitignore")
+
+    if not gitignore.exists():
+        print_op("CREATE", ".gitignore")
+    else:
+        print_op("UPDATE", ".gitignore")
+
+    with gitignore.open("a") as f:
+        print(path.relative_to(BASE_DIR), file=f)

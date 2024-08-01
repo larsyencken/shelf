@@ -4,7 +4,10 @@ from pathlib import Path
 
 import pytest
 import yaml
-from shelf import Shelf  # noqa
+from shelf import Shelf, list_steps, plan_and_run, snapshot_to_shelf
+from shelf.paths import BASE_DIR
+from shelf.types import StepURI
+from shelf.utils import checksum_folder  # noqa
 
 BASE = Path(__file__).parent.parent
 
@@ -32,35 +35,41 @@ def setup_test_environment(tmp_path):
     shutil.rmtree(test_dir)
 
 
+def test_step_uri():
+    uri = StepURI.parse("snapshot://test_namespace/test_dataset/2024-07-26")
+    assert uri.scheme == "snapshot"
+    assert uri.path == "test_namespace/test_dataset/2024-07-26"
+    assert str(uri) == "snapshot://test_namespace/test_dataset/2024-07-26"
+
+
+def test_path_variables_are_dynamic(setup_test_environment):
+    tmp_path = setup_test_environment
+    assert BASE_DIR.resolve().is_relative_to(tmp_path)
+
+
 def test_add_file(setup_test_environment):
     tmp_path = setup_test_environment
 
     # configure test
-    path = "test_namespace/test_dataset/2024-07-26"
+    uri = StepURI.parse("snapshot://test_namespace/test_dataset/2024-07-26")
     data_file = (
         tmp_path
-        / "data/snapshots"
+        / "data"
+        / "snapshots"
         / "test_namespace"
         / "test_dataset"
         / "2024-07-26.txt"
     )
     metadata_file = (
         tmp_path
-        / "data/snapshots"
+        / "data"
+        / "snapshots"
         / "test_namespace"
         / "test_dataset"
         / "2024-07-26.meta.yaml"
     )
     gitignore_file = tmp_path / ".gitignore"
     shelf_yaml_file = tmp_path / "shelf.yaml"
-
-    # make sure files are clear from previous runs
-    data_file.unlink(missing_ok=True)
-    metadata_file.unlink(missing_ok=True)
-    if gitignore_file.exists():
-        gitignore_file.unlink()
-    if shelf_yaml_file.exists():
-        shelf_yaml_file.unlink()
 
     # create dummy file
     new_file = tmp_path / "file1.txt"
@@ -69,7 +78,7 @@ def test_add_file(setup_test_environment):
     # add file to shelf
     os.chdir(tmp_path)
     shelf = Shelf.init()
-    shelf.add(str(new_file), path)
+    snapshot_to_shelf(new_file, uri.path)
 
     # check for data and metadata
     assert data_file.exists()
@@ -78,19 +87,37 @@ def test_add_file(setup_test_environment):
     # check if data path is added to .gitignore
     assert gitignore_file.exists()
     with open(gitignore_file, "r") as f:
-        assert f"{path}.txt\n" in f.read()
+        assert f"data/snapshots/{uri.path}.txt\n" in f.read()
 
     # check if dataset name is added to shelf.yaml under steps
     assert shelf_yaml_file.exists()
     with open(shelf_yaml_file, "r") as f:
         shelf_yaml = yaml.safe_load(f)
-        assert f"snapshot://{path}" in shelf_yaml["steps"]
+        assert str(uri) in shelf_yaml["steps"]
 
     # re-fetch it from shelf
     data_file.unlink()
-    shelf.get("test_namespace/test_dataset/2024-07-26")
+    shelf.refresh()
+    plan_and_run(shelf, str(uri))
     assert data_file.exists()
     assert data_file.read_text() == "Hello, World!"
+
+
+def test_checksum_folder(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # create dummy data
+    local_data_dir = tmp_path / "example"
+    local_data_dir.mkdir()
+    (local_data_dir / "file1.txt").write_text("Hello, World!")
+    (local_data_dir / "file2.txt").write_text("Hello, Cosmos!")
+
+    # calculate checksums
+    manifest = checksum_folder(local_data_dir)
+    assert manifest == {
+        "file1.txt": "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f",
+        "file2.txt": "40efcea9db03adb126f27a0f339c595d1828a0713a789ea49d1ae67159d101e0",
+    }
 
 
 def test_shelve_directory(setup_test_environment):
@@ -103,27 +130,16 @@ def test_shelve_directory(setup_test_environment):
     gitignore_file = tmp_path / ".gitignore"
     shelf_yaml_file = tmp_path / "shelf.yaml"
 
-    # clear from previous runs
-    if data_path.exists():
-        shutil.rmtree(data_path)
-    metadata_file.unlink(missing_ok=True)
-    if gitignore_file.exists():
-        gitignore_file.unlink()
-    if shelf_yaml_file.exists():
-        shelf_yaml_file.unlink()
-
     # create dummy data
-    parent = tmp_path / "example"
-    if parent.exists():
-        shutil.rmtree(parent)
-    parent.mkdir()
-    (parent / "file1.txt").write_text("Hello, World!")
-    (parent / "file2.txt").write_text("Hello, Cosmos!")
+    local_data_dir = tmp_path / "example"
+    local_data_dir.mkdir()
+    (local_data_dir / "file1.txt").write_text("Hello, World!")
+    (local_data_dir / "file2.txt").write_text("Hello, Cosmos!")
 
     # add to shelf
     os.chdir(tmp_path)
     shelf = Shelf.init()
-    shelf.add(str(parent), path)
+    snapshot_to_shelf(local_data_dir, path)
 
     # check the right local files are created
     assert data_path.is_dir()
@@ -132,7 +148,7 @@ def test_shelve_directory(setup_test_environment):
     # check if manifest is present in metadata
     with open(metadata_file, "r") as f:
         metadata = yaml.safe_load(f)
-        assert "manifest" in metadata
+        assert metadata.get("manifest")
 
     # check if data path is added to .gitignore
     assert gitignore_file.exists()
@@ -149,7 +165,7 @@ def test_shelve_directory(setup_test_environment):
     shutil.rmtree(data_path)
 
     # restore from shelf
-    shelf.get(path)
+    plan_and_run(shelf)
 
     # check it got restored
     assert data_path.is_dir()
@@ -168,12 +184,6 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
     )
     shelf_yaml_file = tmp_path / "shelf.yaml"
 
-    # make sure files are clear from previous runs
-    data_file.unlink(missing_ok=True)
-    metadata_file.unlink(missing_ok=True)
-    if shelf_yaml_file.exists():
-        shelf_yaml_file.unlink()
-
     # create dummy file
     new_file = tmp_path / "file1.txt"
     new_file.write_text("Hello, World!")
@@ -181,7 +191,7 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
     # add file to shelf
     os.chdir(tmp_path)
     shelf = Shelf.init()
-    shelf.add(str(new_file), path)
+    snapshot_to_shelf(new_file, path)
 
     # check for data and metadata
     assert data_file.exists()
@@ -195,7 +205,9 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
 
     # re-fetch it from shelf
     data_file.unlink()
-    shelf.get("a/b/c/2024-07-26")
+    shelf.refresh()
+    assert shelf.steps
+    plan_and_run(shelf)
     assert data_file.exists()
     assert data_file.read_text() == "Hello, World!"
 
@@ -204,17 +216,10 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     tmp_path = setup_test_environment
 
     # configure test
-    path = "a/b/c/latest"
-    data_path = tmp_path / "data/snapshots" / path
-    metadata_file = (tmp_path / "data/snapshots" / path).with_suffix(".meta.yaml")
+    uri = StepURI.parse("snapshot://a/b/c/latest")
+    data_path = tmp_path / "data/snapshots" / uri.path
+    metadata_file = (tmp_path / "data/snapshots" / uri.path).with_suffix(".meta.yaml")
     shelf_yaml_file = tmp_path / "shelf.yaml"
-
-    # clear from previous runs
-    if data_path.exists():
-        shutil.rmtree(data_path)
-    metadata_file.unlink(missing_ok=True)
-    if shelf_yaml_file.exists():
-        shelf_yaml_file.unlink()
 
     # create dummy data
     parent = tmp_path / "example"
@@ -227,8 +232,7 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     # add to shelf
     os.chdir(tmp_path)
     shelf = Shelf.init()
-    dataset_name = shelf.add(str(parent), path)
-    assert dataset_name == path
+    snapshot_to_shelf(parent, uri.path)
 
     # check the right local files are created
     assert data_path.is_dir()
@@ -243,13 +247,13 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     assert shelf_yaml_file.exists()
     with open(shelf_yaml_file, "r") as f:
         shelf_yaml = yaml.safe_load(f)
-        assert f"snapshot://{path}" in shelf_yaml["steps"]
+        assert str(uri) in shelf_yaml["steps"]
 
     # clear the data
     shutil.rmtree(data_path)
 
     # restore from shelf
-    shelf.get(path)
+    plan_and_run(shelf, str(uri))
 
     # check it got restored
     assert data_path.is_dir()
@@ -261,8 +265,8 @@ def test_list_datasets(setup_test_environment):
     tmp_path = setup_test_environment
 
     # configure test
-    path1 = "test_namespace/test_dataset1/2024-07-26"
-    path2 = "test_namespace/test_dataset2/2024-07-27"
+    uri1 = StepURI.parse("snapshot://test_namespace/test_dataset1/2024-07-26")
+    uri2 = StepURI.parse("snapshot://test_namespace/test_dataset2/2024-07-27")
     new_file1 = tmp_path / "file1.txt"
     new_file2 = tmp_path / "file2.txt"
     new_file1.write_text("Hello, World!")
@@ -271,31 +275,19 @@ def test_list_datasets(setup_test_environment):
     # add files to shelf
     os.chdir(tmp_path)
     shelf = Shelf.init()
-    shelf.add(str(new_file1), path1)
-    shelf.add(str(new_file2), path2)
+    snapshot_to_shelf(new_file1, uri1.path)
+    snapshot_to_shelf(new_file2, uri2.path)
+    shelf.refresh()
 
-    # capture the output of list_datasets
-    import sys
-    from io import StringIO
-
-    captured_output = StringIO()
-    sys.stdout = captured_output
-    shelf.list_datasets()
-    sys.stdout = sys.__stdout__
-
-    output = captured_output.getvalue().strip().split("\n")
-    assert output == [
-        "snapshot://test_namespace/test_dataset1/2024-07-26",
-        "snapshot://test_namespace/test_dataset2/2024-07-27",
-    ]
+    assert list_steps(shelf) == [uri1, uri2]
 
 
 def test_list_datasets_with_regex(setup_test_environment):
     tmp_path = setup_test_environment
 
     # configure test
-    path1 = "test_namespace/test_dataset1/2024-07-26"
-    path2 = "test_namespace/test_dataset2/2024-07-27"
+    uri1 = StepURI.parse("snapshot://test_namespace/test_dataset1/2024-07-26")
+    uri2 = StepURI.parse("snapshot://test_namespace/test_dataset2/2024-07-27")
     new_file1 = tmp_path / "file1.txt"
     new_file2 = tmp_path / "file2.txt"
     new_file1.write_text("Hello, World!")
@@ -304,28 +296,19 @@ def test_list_datasets_with_regex(setup_test_environment):
     # add files to shelf
     os.chdir(tmp_path)
     shelf = Shelf.init()
-    shelf.add(str(new_file1), path1)
-    shelf.add(str(new_file2), path2)
+    snapshot_to_shelf(new_file1, uri1.path)
+    snapshot_to_shelf(new_file2, uri2.path)
 
-    # capture the output of list_datasets with regex
-    import sys
-    from io import StringIO
-
-    captured_output = StringIO()
-    sys.stdout = captured_output
-    shelf.list_datasets("test_dataset1")
-    sys.stdout = sys.__stdout__
-
-    output = captured_output.getvalue().strip().split("\n")
-    assert output == ["snapshot://test_namespace/test_dataset1/2024-07-26"]
+    shelf.refresh()
+    assert list_steps(shelf, str(uri1)) == [uri1]
 
 
 def test_get_only_out_of_date_datasets(setup_test_environment):
     tmp_path = setup_test_environment
 
     # configure test
-    path1 = "test_namespace/test_dataset1/2024-07-26"
-    path2 = "test_namespace/test_dataset2/2024-07-27"
+    uri1 = StepURI("snapshot", "test_namespace/test_dataset1/2024-07-26")
+    uri2 = StepURI("snapshot", "test_namespace/test_dataset2/2024-07-27")
     new_file1 = tmp_path / "file1.txt"
     new_file2 = tmp_path / "file2.txt"
     new_file1.write_text("Hello, World!")
@@ -334,8 +317,8 @@ def test_get_only_out_of_date_datasets(setup_test_environment):
     # add files to shelf
     os.chdir(tmp_path)
     shelf = Shelf.init()
-    shelf.add(str(new_file1), path1)
-    shelf.add(str(new_file2), path2)
+    snapshot_to_shelf(new_file1, uri1.path)
+    snapshot_to_shelf(new_file2, uri2.path)
 
     # modify one of the files to make it out of date
     data_file1 = (
@@ -348,7 +331,7 @@ def test_get_only_out_of_date_datasets(setup_test_environment):
     data_file1.write_text("Modified content")
 
     # restore datasets
-    shelf.get()
+    plan_and_run(shelf)
 
     # check that only the out-of-date dataset was fetched
     assert data_file1.read_text() == "Hello, World!"
@@ -366,8 +349,8 @@ def test_get_with_force_option(setup_test_environment):
     tmp_path = setup_test_environment
 
     # configure test
-    path1 = "test_namespace/test_dataset1/2024-07-26"
-    path2 = "test_namespace/test_dataset2/2024-07-27"
+    uri1 = StepURI.parse("snapshot://test_namespace/test_dataset1/2024-07-26")
+    uri2 = StepURI.parse("snapshot://test_namespace/test_dataset2/2024-07-27")
     new_file1 = tmp_path / "file1.txt"
     new_file2 = tmp_path / "file2.txt"
     new_file1.write_text("Hello, World!")
@@ -376,8 +359,8 @@ def test_get_with_force_option(setup_test_environment):
     # add files to shelf
     os.chdir(tmp_path)
     shelf = Shelf.init()
-    shelf.add(str(new_file1), path1)
-    shelf.add(str(new_file2), path2)
+    snapshot_to_shelf(new_file1, uri1.path)
+    snapshot_to_shelf(new_file2, uri2.path)
 
     # modify one of the files to make it out of date
     data_file1 = (
@@ -390,7 +373,7 @@ def test_get_with_force_option(setup_test_environment):
     data_file1.write_text("Modified content")
 
     # restore datasets with --force option
-    shelf.get(force=True)
+    plan_and_run(shelf, force=True)
 
     # check that both datasets were fetched
     assert data_file1.read_text() == "Hello, World!"
