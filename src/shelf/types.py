@@ -2,11 +2,11 @@ from dataclasses import dataclass
 from functools import total_ordering
 from typing import Literal
 
-Checksum = str
-FileName = str
-DatasetName = str
-Manifest = dict[FileName, Checksum]
-Dag = dict["StepURI", list["StepURI"]]
+type Checksum = str
+type FileName = str
+type DatasetName = str
+type Manifest = dict[FileName, Checksum]
+type Dag = dict["StepURI", list["StepURI"]]
 
 
 @total_ordering
