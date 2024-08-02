@@ -26,9 +26,7 @@ class Shelf:
         self.refresh()
 
     def refresh(self) -> None:
-        with self.config_file.open("r") as istream:
-            config = yaml.safe_load(istream)
-
+        config = yaml.safe_load(self.config_file.read_text())
         jsonschema.validate(config, SHELF_SCHEMA)
 
         self.version = config["version"]
@@ -41,15 +39,15 @@ class Shelf:
     def init(shelf_file: Path = DEFAULT_SHELF_PATH) -> "Shelf":
         if not shelf_file.exists():
             print_op("CREATE", shelf_file)
-            with shelf_file.open("w") as ostream:
-                yaml.dump(
+            shelf_file.write_text(
+                yaml.safe_dump(
                     {
                         "version": 1,
                         "data_dir": "data",
                         "steps": {},
                     },
-                    ostream,
                 )
+            )
         else:
             print(f"{shelf_file} already exists")
 
@@ -64,8 +62,4 @@ class Shelf:
         }
         jsonschema.validate(config, SHELF_SCHEMA)
         print_op("UPDATE", self.config_file)
-        with self.config_file.open("w") as ostream:
-            yaml.dump(
-                config,
-                ostream,
-            )
+        self.config_file.write_text(yaml.safe_dump(config))
