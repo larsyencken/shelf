@@ -163,12 +163,19 @@ def plan_and_run(
     # to help unit testing
     shelf.refresh()
 
+    # XXX in the future, we could create a Plan object that explains why each step has
+    #     been selected to be run, even down to the level of which checksums are out of
+    #     date or which files are missing
     dag = shelf.steps
     if regex:
         dag = steps.prune_with_regex(dag, regex)
 
     if not force:
         dag = steps.prune_completed(dag)
+
+    if not dag:
+        print("Already up to date!")
+        return
 
     steps.execute_dag(dag, dry_run=dry_run)
 
