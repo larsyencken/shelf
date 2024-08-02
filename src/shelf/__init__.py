@@ -189,6 +189,8 @@ def audit_shelf_cmd(shelf: Shelf, fix: bool = False) -> None:
 
 
 def audit_shelf(shelf: Shelf, fix: bool = False) -> None:
+    # XXX in the future, we could automatically upgrade from one shelf format
+    #     version to another, if there were breaking changes
     for step in shelf.steps:
         audit_step(step, fix)
 
