@@ -1,6 +1,5 @@
 import os
 import shutil
-from pathlib import Path
 
 import pytest
 import yaml
@@ -8,8 +7,6 @@ from shelf import Shelf, audit_shelf, list_steps, plan_and_run, snapshot_to_shel
 from shelf.paths import BASE_DIR
 from shelf.types import StepURI
 from shelf.utils import checksum_folder  # noqa
-
-BASE = Path(__file__).parent.parent
 
 
 @pytest.fixture
