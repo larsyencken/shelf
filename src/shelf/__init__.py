@@ -9,10 +9,10 @@ from dotenv import load_dotenv
 
 from shelf import steps
 from shelf.core import Shelf
-from shelf.paths import BASE_DIR
+from shelf.exceptions import StepDefinitionError
 from shelf.snapshots import Snapshot
 from shelf.types import StepURI
-from shelf.utils import checksum_manifest, print_op
+from shelf.utils import add_to_gitignore, checksum_manifest
 
 load_dotenv()
 
@@ -129,7 +129,7 @@ def snapshot_to_shelf(
     snapshot = Snapshot.create(file_path, dataset_name)
 
     # ensure that the data itself does not enter git
-    _add_to_gitignore(snapshot.path)
+    add_to_gitignore(snapshot.path)
 
     if edit:
         subprocess.run(["vim", snapshot.metadata_path])
@@ -173,6 +173,14 @@ def plan_and_run(
     steps.execute_dag(dag, dry_run=dry_run)
 
 
+def audit_shelf_cmd(shelf: Shelf, fix: bool = False) -> None:
+    try:
+        audit_shelf(shelf, fix)
+    except Exception as e:
+        print(e)
+        exit(1)
+
+
 def audit_shelf(shelf: Shelf, fix: bool = False) -> None:
     for step in shelf.steps:
         audit_step(step, fix)
@@ -190,8 +198,9 @@ def audit_step(step: StepURI, fix: bool = False) -> None:
 
     manifest = snapshot.manifest
     if not manifest:
-        print(f"No manifest found for {step}")
-        exit(1)
+        raise StepDefinitionError(
+            f"Snapshot {step} of type 'directory' is missing a manifest"
+        )
 
     calculated_checksum = checksum_manifest(manifest)
     if calculated_checksum != snapshot.checksum:
@@ -203,7 +212,9 @@ def audit_step(step: StepURI, fix: bool = False) -> None:
             snapshot.checksum = calculated_checksum
             snapshot.save()
         else:
-            exit(1)
+            raise StepDefinitionError(
+                f"Checksum mismatch for {step} of type 'directory'"
+            )
 
 
 def _maybe_add_version(dataset_name: str) -> str:
@@ -224,15 +235,3 @@ def _maybe_add_version(dataset_name: str) -> str:
 
 def _is_valid_version(version: str) -> bool:
     return bool(re.match(r"\d{4}-\d{2}-\d{2}", version)) or version == "latest"
-
-
-def _add_to_gitignore(path: Path) -> None:
-    gitignore = Path(".gitignore")
-
-    if not gitignore.exists():
-        print_op("CREATE", ".gitignore")
-    else:
-        print_op("UPDATE", ".gitignore")
-
-    with gitignore.open("a") as f:
-        print(path.relative_to(BASE_DIR), file=f)

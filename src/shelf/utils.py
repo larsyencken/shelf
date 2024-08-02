@@ -2,8 +2,12 @@ import hashlib
 from pathlib import Path
 from typing import Any, Union
 
-from shelf.console import console
+from rich.console import Console
+
+from shelf.paths import BASE_DIR
 from shelf.types import Checksum, Manifest
+
+console = Console()
 
 IGNORE_FILES = {".DS_Store"}
 
@@ -46,3 +50,15 @@ def checksum_manifest(manifest: Manifest) -> Checksum:
 
 def print_op(type_: str, message: Any) -> None:
     console.print(f"[blue]{type_:>15}[/blue]   {message}")
+
+
+def add_to_gitignore(path: Path) -> None:
+    gitignore = Path(".gitignore")
+
+    if not gitignore.exists():
+        print_op("CREATE", ".gitignore")
+    else:
+        print_op("UPDATE", ".gitignore")
+
+    with gitignore.open("a") as f:
+        print(path.relative_to(BASE_DIR), file=f)

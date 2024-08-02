@@ -76,7 +76,6 @@ def test_add_file(setup_test_environment):
     new_file.write_text("Hello, World!")
 
     # add file to shelf
-    os.chdir(tmp_path)
     shelf = Shelf.init()
     snapshot_to_shelf(new_file, uri.path)
 
@@ -137,7 +136,6 @@ def test_shelve_directory(setup_test_environment):
     (local_data_dir / "file2.txt").write_text("Hello, Cosmos!")
 
     # add to shelf
-    os.chdir(tmp_path)
     shelf = Shelf.init()
     snapshot_to_shelf(local_data_dir, path)
 
@@ -189,7 +187,6 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
     new_file.write_text("Hello, World!")
 
     # add file to shelf
-    os.chdir(tmp_path)
     shelf = Shelf.init()
     snapshot_to_shelf(new_file, path)
 
@@ -230,7 +227,6 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     (parent / "file2.txt").write_text("Hello, Cosmos!")
 
     # add to shelf
-    os.chdir(tmp_path)
     shelf = Shelf.init()
     snapshot_to_shelf(parent, uri.path)
 
@@ -273,7 +269,6 @@ def test_list_datasets(setup_test_environment):
     new_file2.write_text("Hello, Cosmos!")
 
     # add files to shelf
-    os.chdir(tmp_path)
     shelf = Shelf.init()
     snapshot_to_shelf(new_file1, uri1.path)
     snapshot_to_shelf(new_file2, uri2.path)
@@ -294,7 +289,6 @@ def test_list_datasets_with_regex(setup_test_environment):
     new_file2.write_text("Hello, Cosmos!")
 
     # add files to shelf
-    os.chdir(tmp_path)
     shelf = Shelf.init()
     snapshot_to_shelf(new_file1, uri1.path)
     snapshot_to_shelf(new_file2, uri2.path)
@@ -315,7 +309,6 @@ def test_get_only_out_of_date_datasets(setup_test_environment):
     new_file2.write_text("Hello, Cosmos!")
 
     # add files to shelf
-    os.chdir(tmp_path)
     shelf = Shelf.init()
     snapshot_to_shelf(new_file1, uri1.path)
     snapshot_to_shelf(new_file2, uri2.path)
@@ -357,7 +350,6 @@ def test_get_with_force_option(setup_test_environment):
     new_file2.write_text("Hello, Cosmos!")
 
     # add files to shelf
-    os.chdir(tmp_path)
     shelf = Shelf.init()
     snapshot_to_shelf(new_file1, uri1.path)
     snapshot_to_shelf(new_file2, uri2.path)
@@ -387,12 +379,11 @@ def test_get_with_force_option(setup_test_environment):
     assert data_file2.read_text() == "Hello, Cosmos!"
 
 
-def test_audit_command(setup_test_environment):
+def test_audit_can_fix_manifest_checksum(setup_test_environment):
     tmp_path = setup_test_environment
 
     # configure test
     path = "test_namespace/test_dataset/latest"
-    data_path = tmp_path / "data/snapshots/" / path
     metadata_file = (tmp_path / "data/snapshots" / path).with_suffix(".meta.yaml")
 
     # create dummy data
@@ -402,35 +393,22 @@ def test_audit_command(setup_test_environment):
     (local_data_dir / "file2.txt").write_text("Hello, Cosmos!")
 
     # add to shelf
-    os.chdir(tmp_path)
     shelf = Shelf.init()
     snapshot_to_shelf(local_data_dir, path)
-
-    # check the right local files are created
-    assert data_path.is_dir()
-    assert metadata_file.exists()
-
-    # check if manifest is present in metadata
-    with open(metadata_file, "r") as f:
-        metadata = yaml.safe_load(f)
-        assert metadata.get("manifest")
+    shelf.refresh()
 
     # modify the checksum in the metadata to simulate an incorrect checksum
+    metadata = yaml.safe_load(metadata_file.read_text())
     correct_checksum = metadata["checksum"]
-    metadata["checksum"] = "incorrectchecksum"
-    with open(metadata_file, "w") as f:
-        yaml.safe_dump(metadata, f)
+    incorrect_checksum = "0" * 64
+    metadata["checksum"] = incorrect_checksum
+    metadata_file.write_text(yaml.safe_dump(metadata))
 
     # run the audit command
+    with pytest.raises(Exception):
+        audit_shelf(shelf)
 
-    audit_shelf(shelf, fix=False)
-
-    # check that the audit command detected the incorrect checksum
-    with open(metadata_file, "r") as f:
-        metadata = yaml.safe_load(f)
-        assert metadata["checksum"] == "incorrectchecksum"
-
-    # run the audit command with --fix option
+    # now again, but fix the error
     audit_shelf(shelf, fix=True)
 
     # check that the audit command fixed the incorrect checksum
