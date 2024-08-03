@@ -61,10 +61,10 @@ def _exec_command(uri: StepURI, command: list[Path]) -> None:
 
 def _metadata_path(uri: StepURI) -> Path:
     if uri.scheme == "snapshot":
-        return (SNAPSHOT_DIR / uri.path).with_suffix(".meta.json")
+        return (SNAPSHOT_DIR / uri.path).with_suffix(".meta.yaml")
 
     elif uri.scheme == "table":
-        return (TABLE_DIR / uri.path).with_suffix(".meta.json")
+        return (TABLE_DIR / uri.path).with_suffix(".meta.yaml")
 
     else:
         raise ValueError(f"Unknown scheme {uri.scheme}")
