@@ -5,3 +5,5 @@ from pathlib import Path
 BASE_DIR = Path(".")
 DATA_DIR = BASE_DIR / "data"
 SNAPSHOT_DIR = DATA_DIR / "snapshots"
+TABLE_DIR = DATA_DIR / "tables"
+TABLE_SCRIPT_DIR = BASE_DIR / "steps" / "tables"

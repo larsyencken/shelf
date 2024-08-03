@@ -46,6 +46,8 @@ packaging==24.1
     # via pytest
 pluggy==1.5.0
     # via pytest
+polars==1.4.0
+    # via shelf
 pycparser==2.22
     # via cffi
 pycryptodome==3.20.0

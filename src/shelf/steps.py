@@ -1,8 +1,9 @@
 import re
+from typing import List
 
 import graphlib
 
-from shelf import snapshots
+from shelf import snapshots, tables
 from shelf.types import Dag, StepURI
 
 
@@ -55,6 +56,9 @@ def prune_completed(dag: Dag) -> Dag:
 def is_completed(step: StepURI) -> bool:
     if step.scheme == "snapshot":
         return snapshots.is_completed(step)
+    elif step.scheme == "table":
+        # FIXME, this should not be here, and honestly it's a shite implementation
+        return tables.is_completed(step)
 
     raise ValueError(f"Unknown scheme {step.scheme}")
 
@@ -65,13 +69,15 @@ def execute_dag(dag: Dag, dry_run: bool = False) -> None:
     print(f"Executing {len(to_execute)} steps")
     for step in to_execute:
         print(step)
-        execute_step(step)
+        execute_step(step, dag[step])
 
 
-def execute_step(step: StepURI) -> None:
+def execute_step(step: StepURI, dependencies: List[StepURI]) -> None:
     "Execute a single step."
     if step.scheme == "snapshot":
         return snapshots.Snapshot.load(step.path).fetch()
 
+    elif step.scheme == "table":
+        return tables.build_table(step, dependencies)
     else:
         raise ValueError(f"Unknown scheme {step.scheme}")

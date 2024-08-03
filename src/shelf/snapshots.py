@@ -17,7 +17,7 @@ import jsonschema
 import yaml
 
 from shelf.paths import BASE_DIR, SNAPSHOT_DIR
-from shelf.schemas import METADATA_SCHEMA
+from shelf.schemas import SNAPSHOT_SCHEMA
 from shelf.types import Checksum, DatasetName, FileName, Manifest, StepURI
 from shelf.utils import checksum_file, checksum_folder, checksum_manifest, print_op
 
@@ -54,12 +54,13 @@ class Snapshot:
 
     @staticmethod
     def load(path: str) -> "Snapshot":
+        "Load an existing snapshot from its metadata file."
         metadata_file = (SNAPSHOT_DIR / path).with_suffix(".meta.yaml")
 
         metadata = yaml.safe_load(metadata_file.read_text())
         if "date_accessed" in metadata:
             metadata["date_accessed"] = str(metadata["date_accessed"])
-        jsonschema.validate(metadata, METADATA_SCHEMA)
+        jsonschema.validate(metadata, SNAPSHOT_SCHEMA)
 
         metadata["uri"] = StepURI.parse(metadata["uri"])
 
@@ -99,7 +100,7 @@ class Snapshot:
     def save(self):
         # prep the metadata record
         record = self.to_dict()
-        jsonschema.validate(record, METADATA_SCHEMA)
+        jsonschema.validate(record, SNAPSHOT_SCHEMA)
 
         if not self.metadata_path.parent.exists():
             print_op("CREATE", self.metadata_path)

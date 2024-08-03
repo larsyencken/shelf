@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Metadata config",
+  "title": "Table metadata",
   "type": "object",
   "properties": {
     "version": {
@@ -9,15 +9,11 @@
     },
     "uri": {
       "type": "string",
-      "pattern": "^(snapshot|table)://[a-z0-9-_/]+$"
+      "pattern": "^table://[a-z0-9-_/]+.(csv|tsv|feather|parquet)$"
     },
     "checksum": {
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
-    },
-    "snapshot_type": {
-      "type": "string",
-      "enum": ["file", "directory"]
     },
     "extension": {
       "type": "string",
@@ -40,24 +36,24 @@
     "access_notes": {
       "type": "string"
     },
-    "manifest": {
+    "input_manifest": {
       "type": "object",
       "patternProperties": {
-        "^[a-z-Z0-9-_]+$": {
+        "^[a-z0-9-_/]+$": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         }
       }
+    },
+    "schema": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z][a-z0-9_]+$": {
+          "type": "string"
+        }
+      }
     }
   },
-  "required": ["version", "uri", "checksum"],
-  "$oneOf": [
-    {
-      "required": ["extension"]
-    },
-    {
-      "required": ["manifest"]
-    }
-  ],
+  "required": ["version", "uri", "checksum", "input_manifest", "schema"],
   "additionalProperties": false
 }

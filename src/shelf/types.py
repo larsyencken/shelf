@@ -7,6 +7,8 @@ type FileName = str
 type DatasetName = str
 type Manifest = dict[FileName, Checksum]
 type Dag = dict["StepURI", list["StepURI"]]
+type DType = str
+type Schema = dict[str, DType]
 
 
 @total_ordering
