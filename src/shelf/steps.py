@@ -1,10 +1,10 @@
 import re
+from typing import List
 
 import graphlib
 
-from shelf import snapshots
+from shelf import snapshots, tables
 from shelf.types import Dag, StepURI
-from shelf.tables import TableStep
 
 
 def prune_with_regex(dag: Dag, regex: str, descendents: bool = True) -> Dag:
@@ -58,28 +58,7 @@ def is_completed(step: StepURI) -> bool:
         return snapshots.is_completed(step)
     elif step.scheme == "table":
         # FIXME, this should not be here, and honestly it's a shite implementation
-        table_step = TableStep(step)
-        if not (table_step.data_file.exists() and table_step.metadata_file.exists()):
-            return False
-
-        # Walk the input manifest and check every dependency's checksum
-        metadata = table_step._load_metadata(step)
-        input_manifest = metadata.get("input_manifest", {})
-        for dep_uri, dep_checksum in input_manifest.items():
-            dep_step = StepURI.parse(dep_uri)
-            if dep_step.scheme == "snapshot":
-                dep_snapshot = snapshots.Snapshot.load(dep_step.path)
-                if dep_snapshot.checksum != dep_checksum:
-                    return False
-            elif dep_step.scheme == "table":
-                dep_table_step = TableStep(dep_step)
-                dep_metadata = dep_table_step._load_metadata(dep_step)
-                if dep_metadata["checksum"] != dep_checksum:
-                    return False
-            else:
-                raise ValueError(f"Unknown scheme {dep_step.scheme}")
-
-        return True
+        return tables.is_completed(step)
 
     raise ValueError(f"Unknown scheme {step.scheme}")
 
@@ -90,18 +69,15 @@ def execute_dag(dag: Dag, dry_run: bool = False) -> None:
     print(f"Executing {len(to_execute)} steps")
     for step in to_execute:
         print(step)
-        execute_step(step)
+        execute_step(step, dag[step])
 
 
-def execute_step(step: StepURI) -> None:
+def execute_step(step: StepURI, dependencies: List[StepURI]) -> None:
     "Execute a single step."
     if step.scheme == "snapshot":
         return snapshots.Snapshot.load(step.path).fetch()
+
     elif step.scheme == "table":
-        # FIXME dependencies can be other tables, not just snapshots
-        table_step = TableStep(step)
-        dependencies = [snapshots.Snapshot.load(dep.path).path for dep in step.dependencies]
-        data_frame = table_step.generate_data_frame(dependencies)
-        table_step.generate_metadata(data_frame, step.dependencies)
+        return tables.build_table(step, dependencies)
     else:
         raise ValueError(f"Unknown scheme {step.scheme}")

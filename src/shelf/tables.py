@@ -1,78 +1,171 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import Optional, Union
 
-import pandas as pd
 import jsonschema
+import polars as pl
 import yaml
 
-from shelf.paths import BASE_DIR, DATA_DIR
-from shelf.schemas import METADATA_SCHEMA
-from shelf.types import Checksum, DatasetName, StepURI
-from shelf.utils import checksum_file, checksum_manifest, print_op
+from shelf.paths import SNAPSHOT_DIR, TABLE_DIR, TABLE_SCRIPT_DIR
+from shelf.schemas import TABLE_SCHEMA
+from shelf.snapshots import Snapshot
+from shelf.types import Manifest, StepURI
+from shelf.utils import checksum_file
 
 
-class TableStep:
-    def __init__(self, uri: StepURI):
-        self.uri = uri
-        self.dataset_path, self.version, self.extension = self._parse_uri(uri)
-        self.data_file = DATA_DIR / "tables" / self.dataset_path / f"{self.version}.{self.extension}"
-        self.metadata_file = DATA_DIR / "tables" / self.dataset_path / f"{self.version}.meta.json"
+def build_table(uri: StepURI, dependencies: list[StepURI]) -> None:
+    print(uri)
+    assert uri.scheme == "table"
+    command = _generate_build_command(uri, dependencies)
+    _exec_command(uri, command)
+    _gen_metadata(uri, dependencies)
 
-    def _parse_uri(self, uri: StepURI):
-        parts = uri.path.split("/")
-        dataset_path = "/".join(parts[:-1])
-        version, extension = parts[-1].split(".")
-        return dataset_path, version, extension
 
-    # FIXME we don't care about a data frame here
-    def generate_data_frame(self, dependencies: list[Path]) -> pd.DataFrame:
-        script_path = self._find_executable_script()
-        output_file = self.data_file
+def _generate_build_command(uri: StepURI, dependencies: list[StepURI]) -> list[Path]:
+    executable = _get_executable(uri)
 
-        command = [str(script_path)] + [str(dep) for dep in dependencies] + [str(output_file)]
-        subprocess.run(command, check=True)
+    cmd = [executable]
+    for dep in dependencies:
+        cmd.append(_dependency_path(dep))
 
-        if not output_file.exists():
-            raise FileNotFoundError(f"Output file {output_file} not found after execution")
+    dest_path = TABLE_DIR / uri.path
+    cmd.append(dest_path)
 
-        return pd.read_csv(output_file)
+    return cmd
 
-    def _find_executable_script(self) -> Path:
-        script_path = Path(f"steps/tables/{self.dataset_path}/{self.version}")
-        if script_path.exists() and os.access(script_path, os.X_OK):
-            return script_path
 
-        script_path = Path(f"steps/tables/{self.dataset_path}")
-        if script_path.exists() and os.access(script_path, os.X_OK):
-            return script_path
+def _dependency_path(uri: StepURI) -> Path:
+    if uri.scheme == "snapshot":
+        return Snapshot.load(uri.path).path
 
-        raise FileNotFoundError(f"No executable script found for table step {self.uri}")
+    elif uri.scheme == "table":
+        return TABLE_DIR / uri.path
+    else:
+        raise ValueError(f"Unknown scheme {uri.scheme}")
 
-    def generate_metadata(self, data_frame: pd.DataFrame, dependencies: list[StepURI]) -> None:
-        metadata = {
-            "version": 1,
-            "checksum": checksum_file(self.data_file),
-            "input_manifest": self._generate_input_manifest(dependencies),
-        }
 
-        if len(dependencies) == 1:
-            dep_metadata = self._load_metadata(dependencies[0])
-            for field in ["name", "source_name", "source_url", "date_accessed", "access_notes"]:
-                if field in dep_metadata:
-                    metadata[field] = dep_metadata[field]
+def _is_valid_script(script: Path) -> bool:
+    return script.is_file() and os.access(script, os.X_OK)
 
-        jsonschema.validate(metadata, METADATA_SCHEMA)
-        self.metadata_file.write_text(yaml.safe_dump(metadata))
 
-    def _generate_input_manifest(self, dependencies: list[StepURI]) -> dict[str, Checksum]:
-        manifest = {}
-        for dep in dependencies:
-            dep_metadata = self._load_metadata(dep)
-            manifest[str(dep)] = dep_metadata["checksum"]
-        return manifest
+def _exec_command(uri: StepURI, command: list[Path]) -> None:
+    dest_path = command[-1]
+    if dest_path.exists():
+        dest_path.unlink()
 
-    def _load_metadata(self, uri: StepURI) -> dict:
-        metadata_file = (DATA_DIR / "tables" / uri.path).with_suffix(".meta.json")
-        return yaml.safe_load(metadata_file.read_text())
+    subprocess.run(command, check=True)
+
+    if not dest_path.exists():
+        raise Exception(f"Table step {uri} did not generate the expected {dest_path}")
+
+
+def _metadata_path(uri: StepURI) -> Path:
+    if uri.scheme == "snapshot":
+        return (SNAPSHOT_DIR / uri.path).with_suffix(".meta.json")
+
+    elif uri.scheme == "table":
+        return (TABLE_DIR / uri.path).with_suffix(".meta.json")
+
+    else:
+        raise ValueError(f"Unknown scheme {uri.scheme}")
+
+
+def _gen_metadata(uri: StepURI, dependencies: list[StepURI]) -> None:
+    dest_path = _metadata_path(uri)
+    metadata = {
+        "uri": str(uri),
+        "version": 1,
+        "checksum": checksum_file(TABLE_DIR / uri.path),
+        "input_manifest": _generate_input_manifest(uri, dependencies),
+    }
+
+    if len(dependencies) == 1:
+        # inherit metadata from the dependency
+        dep_metadata_path = _metadata_path(dependencies[0])
+        dep_metadata = yaml.safe_load(dep_metadata_path.read_text())
+        for field in [
+            "name",
+            "source_name",
+            "source_url",
+            "date_accessed",
+            "access_notes",
+        ]:
+            if field in dep_metadata:
+                metadata[field] = dep_metadata[field]
+
+    metadata["schema"] = _infer_schema(uri)
+
+    jsonschema.validate(metadata, TABLE_SCHEMA)
+
+    if not any(col.startswith("dim_") for col in metadata["schema"]):
+        # we have not yet written this metadata, so the step is not yet complete
+        raise ValueError(
+            f"Table {uri} does not have any dimension columns prefixed with dim_"
+        )
+
+    dest_path.write_text(yaml.safe_dump(metadata))
+
+
+def _generate_input_manifest(uri: StepURI, dependencies: list[StepURI]) -> Manifest:
+    manifest = {}
+
+    # add the script we used to generate the table
+    executable = _get_executable(uri)
+    manifest[str(executable)] = checksum_file(executable)
+
+    # add every dependency's metadata file; that file includes a checksum of its data,
+    # so we cover both data and metadata this way
+    for dep in dependencies:
+        dep_metadata_file = _metadata_path(dep)
+        manifest[str(dep)] = checksum_file(dep_metadata_file)
+
+    return manifest
+
+
+def is_completed(step: StepURI) -> bool:
+    assert step.scheme == "table"
+
+    # the easy case; is it missing?
+    if not (TABLE_DIR / step.path).exists() or not _metadata_path(step).exists():
+        return False
+
+    # it's there, but is it up to date? check the manifest
+    metadata = yaml.safe_load(_metadata_path(step).read_text())
+    input_manifest = metadata["input_manifest"]
+    for path, checksum in input_manifest.items():
+        if checksum != checksum_file(path):
+            return False
+
+    return True
+
+
+def _infer_schema(uri: StepURI) -> dict[str, str]:
+    data_path = TABLE_DIR / uri.path
+    suffix = data_path.suffix
+
+    if suffix in [".csv", ".tsv"]:
+        df = pl.read_csv(data_path, separator="\t" if suffix == ".tsv" else ",")
+
+    elif suffix == ".jsonl":
+        df = pl.read_ndjson(data_path)
+
+    elif suffix == ".feather":
+        df = pl.read_ipc(data_path)
+
+    elif suffix == ".parquet":
+        df = pl.read_parquet(data_path)
+
+    else:
+        raise ValueError("Unsupported file type")
+
+    return {col: str(dtype) for col, dtype in df.schema.items()}
+
+
+def _get_executable(uri: StepURI) -> Path:
+    executable = (TABLE_SCRIPT_DIR / uri.path).with_suffix("")
+    if not _is_valid_script(executable):
+        executable = executable.parent
+        if not _is_valid_script(executable):
+            raise FileNotFoundError(f"No executable script found for table step {uri}")
+
+    return executable

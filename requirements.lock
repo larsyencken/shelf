@@ -31,6 +31,8 @@ mdurl==0.1.2
     # via markdown-it-py
 nodeenv==1.9.1
     # via pyright
+polars==1.4.0
+    # via shelf
 pygments==2.18.0
     # via rich
 pyright==1.1.372
