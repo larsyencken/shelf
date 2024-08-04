@@ -220,12 +220,6 @@ def is_completed(uri: StepURI) -> bool:
     return Snapshot.load(uri.path).is_up_to_date()
 
 
-def fetch_from_s3(checksum: Checksum, dest_path: Path) -> None:
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
-    s3_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
-    download_file(s3_path, dest_path)
-
-
 def download_file(s3_path: str, dest_path: Path) -> None:
     s3 = s3_client()
 
@@ -248,3 +242,34 @@ def s3_client():
         endpoint_url=os.environ["S3_ENDPOINT_URL"],
     )
     return s3
+
+
+def check_local_cache(checksum: Checksum) -> Optional[Path]:
+    cache_path = (
+        Path.home() / ".cache" / "shelf" / checksum[:2] / checksum[2:4] / checksum
+    )
+
+    if cache_path.exists():
+        print_op("CACHE HIT", f"~/{cache_path.relative_to(Path.home())}")
+        return cache_path
+
+    return None
+
+
+def fetch_from_s3(checksum: Checksum, dest_path: Path) -> None:
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cache_path = check_local_cache(checksum)
+    if cache_path:
+        shutil.copy(cache_path, dest_path)
+        return
+
+    s3_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
+    download_file(s3_path, dest_path)
+
+    cache_path = (
+        Path.home() / ".cache" / "shelf" / checksum[:2] / checksum[2:4] / checksum
+    )
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    print_op("CACHE ADD", f"~/{cache_path.relative_to(Path.home())}")
+    shutil.copy(dest_path, cache_path)

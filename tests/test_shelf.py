@@ -1,5 +1,6 @@
 import os
 import shutil
+from pathlib import Path
 
 import pytest
 import yaml
@@ -401,3 +402,110 @@ def test_audit_can_fix_manifest_checksum(setup_test_environment):
     # check that the audit command fixed the incorrect checksum
     metadata = load_yaml(metadata_file)
     assert metadata["checksum"] == correct_checksum
+
+
+def test_cache_hit(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    uri = StepURI.parse("snapshot://test_namespace/test_dataset/2024-07-26")
+    data_file = (
+        tmp_path
+        / "data"
+        / "snapshots"
+        / "test_namespace"
+        / "test_dataset"
+        / "2024-07-26.txt"
+    )
+    metadata_file = (
+        tmp_path
+        / "data"
+        / "snapshots"
+        / "test_namespace"
+        / "test_dataset"
+        / "2024-07-26.meta.yaml"
+    )
+    cache_file = (
+        Path.home()
+        / ".cache"
+        / "shelf"
+        / "df"
+        / "fd"
+        / "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f"
+    )
+
+    # create dummy file
+    new_file = tmp_path / "file1.txt"
+    new_file.write_text("Hello, World!")
+
+    # add file to shelf
+    shelf = Shelf.init()
+    snapshot_to_shelf(new_file, uri.path)
+
+    # check for data and metadata
+    assert data_file.exists()
+    assert metadata_file.exists()
+
+    # move the file to cache
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(data_file, cache_file)
+
+    # re-fetch it from shelf
+    shelf.refresh()
+    plan_and_run(shelf, str(uri))
+    assert data_file.exists()
+    assert data_file.read_text() == "Hello, World!"
+
+
+def test_cache_miss(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    uri = StepURI.parse("snapshot://test_namespace/test_dataset/2024-07-26")
+    data_file = (
+        tmp_path
+        / "data"
+        / "snapshots"
+        / "test_namespace"
+        / "test_dataset"
+        / "2024-07-26.txt"
+    )
+    metadata_file = (
+        tmp_path
+        / "data"
+        / "snapshots"
+        / "test_namespace"
+        / "test_dataset"
+        / "2024-07-26.meta.yaml"
+    )
+    cache_file = (
+        Path.home()
+        / ".cache"
+        / "shelf"
+        / "dffd"
+        / "6021"
+        / "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f"
+    )
+
+    # create dummy file
+    new_file = tmp_path / "file1.txt"
+    new_file.write_text("Hello, World!")
+
+    # add file to shelf
+    shelf = Shelf.init()
+    snapshot_to_shelf(new_file, uri.path)
+
+    # check for data and metadata
+    assert data_file.exists()
+    assert metadata_file.exists()
+
+    # remove the file from cache
+    if cache_file.exists():
+        cache_file.unlink()
+
+    # re-fetch it from shelf
+    data_file.unlink()
+    shelf.refresh()
+    plan_and_run(shelf, str(uri))
+    assert data_file.exists()
+    assert data_file.read_text() == "Hello, World!"
