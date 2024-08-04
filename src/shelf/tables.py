@@ -106,7 +106,7 @@ def _gen_metadata(uri: StepURI, dependencies: list[StepURI]) -> None:
             f"Table {uri} does not have any dimension columns prefixed with dim_"
         )
 
-    dest_path.write_text(yaml.safe_dump(metadata))
+    dest_path.write_text(yaml.safe_dump(metadata, Dumper=yaml.Dumper, default_flow_style=False))
 
 
 def _generate_input_manifest(uri: StepURI, dependencies: list[StepURI]) -> Manifest:

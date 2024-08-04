@@ -108,7 +108,9 @@ class Snapshot:
             print_op("UPDATE", self.metadata_path)
 
         self.metadata_path.parent.mkdir(parents=True, exist_ok=True)
-        self.metadata_path.write_text(yaml.safe_dump(record))
+        self.metadata_path.write_text(
+            yaml.safe_dump(record, Dumper=yaml.Dumper, default_flow_style=False)
+        )
 
     def to_dict(self) -> dict:
         record = asdict(self)

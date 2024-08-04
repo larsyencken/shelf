@@ -46,6 +46,8 @@ class Shelf:
                         "data_dir": "data",
                         "steps": {},
                     },
+                    Dumper=yaml.Dumper,
+                    default_flow_style=False,
                 )
             )
         else:
@@ -62,4 +64,6 @@ class Shelf:
         }
         jsonschema.validate(config, SHELF_SCHEMA)
         print_op("UPDATE", self.config_file)
-        self.config_file.write_text(yaml.safe_dump(config))
+        self.config_file.write_text(
+            yaml.safe_dump(config, Dumper=yaml.Dumper, default_flow_style=False)
+        )
