@@ -12,7 +12,7 @@ from shelf.core import Shelf
 from shelf.exceptions import StepDefinitionError
 from shelf.snapshots import Snapshot
 from shelf.types import StepURI
-from shelf.utils import add_to_gitignore, checksum_manifest
+from shelf.utils import add_to_gitignore, checksum_manifest, console
 
 load_dotenv()
 
@@ -196,18 +196,18 @@ def audit_shelf_cmd(shelf: Shelf, fix: bool = False) -> None:
 def audit_shelf(shelf: Shelf, fix: bool = False) -> None:
     # XXX in the future, we could automatically upgrade from one shelf format
     #     version to another, if there were breaking changes
+    print(f"Auditing {len(shelf.steps)} steps")
     for step in shelf.steps:
         audit_step(step, fix)
+        console.print(f"[blue]{'OK':>5}[/blue]   {step}")
 
 
 def audit_step(step: StepURI, fix: bool = False) -> None:
     if step.scheme != "snapshot":
-        print(f"Skipping non-snapshot step {step}")
         return
 
     snapshot = Snapshot.load(step.path)
     if snapshot.snapshot_type != "directory":
-        print(f"Skipping non-directory snapshot {step}")
         return
 
     manifest = snapshot.manifest
