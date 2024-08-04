@@ -6,7 +6,7 @@ import yaml
 from shelf import Shelf, audit_shelf, list_steps, plan_and_run, snapshot_to_shelf
 from shelf.paths import BASE_DIR
 from shelf.types import StepURI
-from shelf.utils import checksum_folder  # noqa
+from shelf.utils import checksum_folder, load_yaml  # noqa
 
 
 @pytest.fixture
@@ -86,10 +86,8 @@ def test_add_file(setup_test_environment):
         assert f"data/snapshots/{uri.path}.txt\n" in f.read()
 
     # check if dataset name is added to shelf.yaml under steps
-    assert shelf_yaml_file.exists()
-    with open(shelf_yaml_file, "r") as f:
-        shelf_yaml = yaml.safe_load(f)
-        assert str(uri) in shelf_yaml["steps"]
+    shelf_yaml = load_yaml(shelf_yaml_file)
+    assert str(uri) in shelf_yaml["steps"]
 
     # re-fetch it from shelf
     data_file.unlink()
@@ -141,9 +139,8 @@ def test_shelve_directory(setup_test_environment):
     assert metadata_file.exists()
 
     # check if manifest is present in metadata
-    with open(metadata_file, "r") as f:
-        metadata = yaml.safe_load(f)
-        assert metadata.get("manifest")
+    metadata = load_yaml(metadata_file)
+    assert metadata.get("manifest")
 
     # check if data path is added to .gitignore
     assert gitignore_file.exists()
@@ -151,10 +148,8 @@ def test_shelve_directory(setup_test_environment):
         assert f"{path}\n" in f.read()
 
     # check if dataset name is added to shelf.yaml under steps
-    assert shelf_yaml_file.exists()
-    with open(shelf_yaml_file, "r") as f:
-        shelf_yaml = yaml.safe_load(f)
-        assert f"snapshot://{path}" in shelf_yaml["steps"]
+    shelf_yaml = load_yaml(shelf_yaml_file)
+    assert f"snapshot://{path}" in shelf_yaml["steps"]
 
     # clear the data
     shutil.rmtree(data_path)
@@ -192,10 +187,8 @@ def test_add_file_with_arbitrary_depth_namespace(setup_test_environment):
     assert metadata_file.exists()
 
     # check if dataset name is added to shelf.yaml under steps
-    assert shelf_yaml_file.exists()
-    with open(shelf_yaml_file, "r") as f:
-        shelf_yaml = yaml.safe_load(f)
-        assert f"snapshot://{path}" in shelf_yaml["steps"]
+    shelf_yaml = load_yaml(shelf_yaml_file)
+    assert f"snapshot://{path}" in shelf_yaml["steps"]
 
     # re-fetch it from shelf
     data_file.unlink()
@@ -232,15 +225,12 @@ def test_shelve_directory_with_arbitrary_depth_namespace(setup_test_environment)
     assert metadata_file.exists()
 
     # check if manifest is present in metadata
-    with open(metadata_file, "r") as f:
-        metadata = yaml.safe_load(f)
-        assert "manifest" in metadata
+    metadata = load_yaml(metadata_file)
+    assert "manifest" in metadata
 
     # check if dataset name is added to shelf.yaml under steps
-    assert shelf_yaml_file.exists()
-    with open(shelf_yaml_file, "r") as f:
-        shelf_yaml = yaml.safe_load(f)
-        assert str(uri) in shelf_yaml["steps"]
+    shelf_yaml = load_yaml(shelf_yaml_file)
+    assert str(uri) in shelf_yaml["steps"]
 
     # clear the data
     shutil.rmtree(data_path)
@@ -395,7 +385,7 @@ def test_audit_can_fix_manifest_checksum(setup_test_environment):
     shelf.refresh()
 
     # modify the checksum in the metadata to simulate an incorrect checksum
-    metadata = yaml.safe_load(metadata_file.read_text())
+    metadata = load_yaml(metadata_file)
     correct_checksum = metadata["checksum"]
     incorrect_checksum = "0" * 64
     metadata["checksum"] = incorrect_checksum
@@ -409,6 +399,5 @@ def test_audit_can_fix_manifest_checksum(setup_test_environment):
     audit_shelf(shelf, fix=True)
 
     # check that the audit command fixed the incorrect checksum
-    with open(metadata_file, "r") as f:
-        metadata = yaml.safe_load(f)
-        assert metadata["checksum"] == correct_checksum
+    metadata = load_yaml(metadata_file)
+    assert metadata["checksum"] == correct_checksum

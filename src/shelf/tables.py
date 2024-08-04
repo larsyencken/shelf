@@ -4,13 +4,12 @@ from pathlib import Path
 
 import jsonschema
 import polars as pl
-import yaml
 
 from shelf.paths import SNAPSHOT_DIR, TABLE_DIR, TABLE_SCRIPT_DIR
 from shelf.schemas import TABLE_SCHEMA
 from shelf.snapshots import Snapshot
 from shelf.types import Manifest, StepURI
-from shelf.utils import checksum_file, print_op
+from shelf.utils import checksum_file, load_yaml, print_op, save_yaml
 
 
 def build_table(uri: StepURI, dependencies: list[StepURI]) -> None:
@@ -85,7 +84,7 @@ def _gen_metadata(uri: StepURI, dependencies: list[StepURI]) -> None:
     if len(dependencies) == 1:
         # inherit metadata from the dependency
         dep_metadata_path = _metadata_path(dependencies[0])
-        dep_metadata = yaml.safe_load(dep_metadata_path.read_text())
+        dep_metadata = load_yaml(dep_metadata_path)
         for field in [
             "name",
             "source_name",
@@ -106,7 +105,7 @@ def _gen_metadata(uri: StepURI, dependencies: list[StepURI]) -> None:
             f"Table {uri} does not have any dimension columns prefixed with dim_"
         )
 
-    dest_path.write_text(yaml.safe_dump(metadata))
+    save_yaml(metadata, dest_path)
 
 
 def _generate_input_manifest(uri: StepURI, dependencies: list[StepURI]) -> Manifest:
@@ -133,7 +132,7 @@ def is_completed(uri: StepURI) -> bool:
         return False
 
     # it's there, but is it up to date? check the manifest
-    metadata = yaml.safe_load(_metadata_path(uri).read_text())
+    metadata = load_yaml(_metadata_path(uri))
     input_manifest = metadata["input_manifest"]
     for path, checksum in input_manifest.items():
         if checksum != checksum_file(path):
