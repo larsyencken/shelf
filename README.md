@@ -2,6 +2,8 @@
 
 _A personal ETL and data lake._
 
+Status: in alpha, changing often
+
 ## Overview
 
 Shelf is a library and personal ETL framework for managing small data files and directories in a content-addressable way.
