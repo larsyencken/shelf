@@ -14,12 +14,18 @@ from typing import Literal, Optional, Union
 
 import boto3
 import jsonschema
-import yaml
 
 from shelf.paths import BASE_DIR, SNAPSHOT_DIR
 from shelf.schemas import SNAPSHOT_SCHEMA
 from shelf.types import Checksum, DatasetName, FileName, Manifest, StepURI
-from shelf.utils import checksum_file, checksum_folder, checksum_manifest, print_op
+from shelf.utils import (
+    checksum_file,
+    checksum_folder,
+    checksum_manifest,
+    load_yaml,
+    print_op,
+    save_yaml,
+)
 
 
 @dataclass
@@ -57,7 +63,7 @@ class Snapshot:
         "Load an existing snapshot from its metadata file."
         metadata_file = (SNAPSHOT_DIR / path).with_suffix(".meta.yaml")
 
-        metadata = yaml.safe_load(metadata_file.read_text())
+        metadata = load_yaml(metadata_file)
         if "date_accessed" in metadata:
             metadata["date_accessed"] = str(metadata["date_accessed"])
         jsonschema.validate(metadata, SNAPSHOT_SCHEMA)
@@ -107,8 +113,7 @@ class Snapshot:
         else:
             print_op("UPDATE", self.metadata_path)
 
-        self.metadata_path.parent.mkdir(parents=True, exist_ok=True)
-        self.metadata_path.write_text(yaml.safe_dump(record))
+        save_yaml(record, self.metadata_path)
 
     def to_dict(self) -> dict:
         record = asdict(self)

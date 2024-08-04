@@ -2,11 +2,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import jsonschema
-import yaml
 
 from shelf.schemas import SHELF_SCHEMA
 from shelf.types import Dag, StepURI
-from shelf.utils import print_op
+from shelf.utils import load_yaml, save_yaml
 
 DEFAULT_SHELF_PATH = Path("shelf.yaml")
 
@@ -26,7 +25,7 @@ class Shelf:
         self.refresh()
 
     def refresh(self) -> None:
-        config = yaml.safe_load(self.config_file.read_text())
+        config = load_yaml(self.config_file)
         jsonschema.validate(config, SHELF_SCHEMA)
 
         self.version = config["version"]
@@ -38,15 +37,13 @@ class Shelf:
     @staticmethod
     def init(shelf_file: Path = DEFAULT_SHELF_PATH) -> "Shelf":
         if not shelf_file.exists():
-            print_op("CREATE", shelf_file)
-            shelf_file.write_text(
-                yaml.safe_dump(
-                    {
-                        "version": 1,
-                        "data_dir": "data",
-                        "steps": {},
-                    },
-                )
+            save_yaml(
+                {
+                    "version": 1,
+                    "data_dir": "data",
+                    "steps": {},
+                },
+                shelf_file,
             )
         else:
             print(f"{shelf_file} already exists")
@@ -61,5 +58,4 @@ class Shelf:
             },
         }
         jsonschema.validate(config, SHELF_SCHEMA)
-        print_op("UPDATE", self.config_file)
-        self.config_file.write_text(yaml.safe_dump(config))
+        save_yaml(config, self.config_file)

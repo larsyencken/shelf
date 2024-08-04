@@ -2,6 +2,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Union
 
+import yaml
 from rich.console import Console
 
 from shelf.paths import BASE_DIR
@@ -62,3 +63,16 @@ def add_to_gitignore(path: Path) -> None:
 
     with gitignore.open("a") as f:
         print(path.relative_to(BASE_DIR), file=f)
+
+
+def save_yaml(obj: dict, path: Path) -> None:
+    if path.exists():
+        print_op("UPDATE", path)
+    else:
+        print_op("CREATE", path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(obj, sort_keys=False))
+
+
+def load_yaml(path: Path) -> Any:
+    return yaml.safe_load(path.read_text())

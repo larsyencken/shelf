@@ -4,11 +4,10 @@ import shutil
 from typing import Any, Optional
 
 import pytest
-import yaml
 from shelf.paths import SNAPSHOT_DIR, TABLE_DIR, TABLE_SCRIPT_DIR
 from shelf.tables import _metadata_path, build_table
 from shelf.types import StepURI
-from shelf.utils import checksum_file
+from shelf.utils import checksum_file, load_yaml, save_yaml
 
 
 @pytest.fixture
@@ -127,7 +126,7 @@ def test_generate_with_single_dep(setup_test_environment):
 
     build_table(uri, deps)
 
-    metadata = yaml.safe_load(_metadata_path(uri).read_text())
+    metadata = load_yaml(_metadata_path(uri))
     for key, value in expected_metadata.items():
         assert metadata[key] == value
 
@@ -144,17 +143,16 @@ def add_mock_snapshot(metadata: Optional[dict[str, Any]] = None) -> StepURI:
 
     # make the matching metadata file
     metadata_path = dest_path.with_suffix(".meta.yaml")
-    metadata_path.write_text(
-        yaml.safe_dump(
-            {
-                "uri": str(uri),
-                "version": 1,
-                "checksum": checksum_file(dest_path),
-                "extension": ".txt",
-                "snapshot_type": "file",
-                **(metadata or {}),
-            }
-        )
+    save_yaml(
+        {
+            "uri": str(uri),
+            "version": 1,
+            "checksum": checksum_file(dest_path),
+            "extension": ".txt",
+            "snapshot_type": "file",
+            **(metadata or {}),
+        },
+        metadata_path,
     )
 
     return uri
