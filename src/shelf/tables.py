@@ -10,11 +10,10 @@ from shelf.paths import SNAPSHOT_DIR, TABLE_DIR, TABLE_SCRIPT_DIR
 from shelf.schemas import TABLE_SCHEMA
 from shelf.snapshots import Snapshot
 from shelf.types import Manifest, StepURI
-from shelf.utils import checksum_file
+from shelf.utils import checksum_file, print_op
 
 
 def build_table(uri: StepURI, dependencies: list[StepURI]) -> None:
-    print(uri)
     assert uri.scheme == "table"
     command = _generate_build_command(uri, dependencies)
     _exec_command(uri, command)
@@ -49,11 +48,15 @@ def _is_valid_script(script: Path) -> bool:
 
 
 def _exec_command(uri: StepURI, command: list[Path]) -> None:
+    print_op("EXECUTE", command[0])
     dest_path = command[-1]
     if dest_path.exists():
         dest_path.unlink()
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    subprocess.run(command, check=True)
+    command_s = [str(p.resolve()) for p in command]
+
+    subprocess.run(command_s, check=True)
 
     if not dest_path.exists():
         raise Exception(f"Table step {uri} did not generate the expected {dest_path}")
@@ -117,20 +120,20 @@ def _generate_input_manifest(uri: StepURI, dependencies: list[StepURI]) -> Manif
     # so we cover both data and metadata this way
     for dep in dependencies:
         dep_metadata_file = _metadata_path(dep)
-        manifest[str(dep)] = checksum_file(dep_metadata_file)
+        manifest[str(dep_metadata_file)] = checksum_file(dep_metadata_file)
 
     return manifest
 
 
-def is_completed(step: StepURI) -> bool:
-    assert step.scheme == "table"
+def is_completed(uri: StepURI) -> bool:
+    assert uri.scheme == "table"
 
     # the easy case; is it missing?
-    if not (TABLE_DIR / step.path).exists() or not _metadata_path(step).exists():
+    if not (TABLE_DIR / uri.path).exists() or not _metadata_path(uri).exists():
         return False
 
     # it's there, but is it up to date? check the manifest
-    metadata = yaml.safe_load(_metadata_path(step).read_text())
+    metadata = yaml.safe_load(_metadata_path(uri).read_text())
     input_manifest = metadata["input_manifest"]
     for path, checksum in input_manifest.items():
         if checksum != checksum_file(path):
@@ -164,8 +167,11 @@ def _infer_schema(uri: StepURI) -> dict[str, str]:
 def _get_executable(uri: StepURI) -> Path:
     executable = (TABLE_SCRIPT_DIR / uri.path).with_suffix("")
     if not _is_valid_script(executable):
-        executable = executable.parent
-        if not _is_valid_script(executable):
-            raise FileNotFoundError(f"No executable script found for table step {uri}")
+        if _is_valid_script(executable.parent):
+            executable = executable.parent
+        else:
+            raise FileNotFoundError(
+                f"No executable script found for table step {uri} at {executable} or {executable.parent}"
+            )
 
     return executable

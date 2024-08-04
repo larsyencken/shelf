@@ -59,6 +59,11 @@ def main():
         action="store_true",
         help="Force re-build of steps",
     )
+    run_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Don't execute, just print the steps that would be executed",
+    )
 
     list_parser = subparsers.add_parser(
         "list", help="List all datasets in alphabetical order"
@@ -99,7 +104,7 @@ def main():
         return list_steps_cmd(shelf, args.regex)
 
     elif args.command == "run":
-        return plan_and_run(shelf, args.path, args.force)
+        return plan_and_run(shelf, args.path, args.force, args.dry_run)
 
     elif args.command == "audit":
         return audit_shelf(shelf, args.fix)
