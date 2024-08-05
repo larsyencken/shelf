@@ -1,4 +1,5 @@
 import argparse
+import os
 import re
 import subprocess
 from datetime import datetime
@@ -28,18 +29,18 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    add_parser = subparsers.add_parser(
-        "add", help="Add a data file or directory to the content store"
+    snapshot_parser = subparsers.add_parser(
+        "snapshot", help="Add a data file or directory to the content store"
     )
-    add_parser.add_argument(
+    snapshot_parser.add_argument(
         "file_path", type=str, help="Path to the data file or directory"
     )
-    add_parser.add_argument(
+    snapshot_parser.add_argument(
         "dataset_name",
         type=str,
         help="Dataset name as a relative path of arbitrary size",
     )
-    add_parser.add_argument(
+    snapshot_parser.add_argument(
         "--edit",
         action="store_true",
         help="Edit the metadata file in an interactive editor.",
@@ -96,9 +97,8 @@ def main():
     shelf = Shelf()
 
     if args.command == "snapshot":
-        return snapshot_to_shelf(
-            Path(args.file_path), args.dataset_name, edit=args.edit
-        )
+        snapshot_to_shelf(Path(args.file_path), args.dataset_name, edit=args.edit)
+        return
 
     elif args.command == "list":
         return list_steps_cmd(shelf, args.regex)
@@ -120,6 +120,8 @@ def init_shelf() -> None:
 def snapshot_to_shelf(
     file_path: Path, dataset_name: str, edit: bool = False
 ) -> Snapshot:
+    _check_s3_credentials()
+
     # ensure we are tagging a version on everything
     dataset_name = _maybe_add_version(dataset_name)
 
@@ -249,3 +251,14 @@ def _maybe_add_version(dataset_name: str) -> str:
 
 def _is_valid_version(version: str) -> bool:
     return bool(re.match(r"\d{4}-\d{2}-\d{2}", version)) or version == "latest"
+
+
+def _check_s3_credentials() -> None:
+    for key in [
+        "S3_ACCESS_KEY",
+        "S3_SECRET_KEY",
+        "S3_ENDPOINT_URL",
+        "S3_BUCKET_NAME",
+    ]:
+        if key not in os.environ:
+            raise ValueError(f"Missing S3 credentials -- please set {key} in .env")

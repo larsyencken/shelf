@@ -108,11 +108,6 @@ class Snapshot:
         record = self.to_dict()
         jsonschema.validate(record, SNAPSHOT_SCHEMA)
 
-        if not self.metadata_path.parent.exists():
-            print_op("CREATE", self.metadata_path)
-        else:
-            print_op("UPDATE", self.metadata_path)
-
         save_yaml(record, self.metadata_path)
 
     def to_dict(self) -> dict:
@@ -182,11 +177,11 @@ def add_directory_to_s3(file_path: Path) -> dict[FileName, Checksum]:
 def add_to_s3(file_path: Union[str, Path], checksum: Checksum) -> None:
     s3 = boto3.client(
         "s3",
-        aws_access_key_id=os.getenv("S3_ACCESS_KEY"),
-        aws_secret_access_key=os.getenv("S3_SECRET_KEY"),
-        endpoint_url=os.getenv("S3_ENDPOINT_URL"),
+        aws_access_key_id=os.environ["S3_ACCESS_KEY"],
+        aws_secret_access_key=os.environ["S3_SECRET_KEY"],
+        endpoint_url=os.environ["S3_ENDPOINT_URL"],
     )
-    bucket_name = os.getenv("S3_BUCKET_NAME")
+    bucket_name = os.environ["S3_BUCKET_NAME"]
     dest_path = f"{checksum[:2]}/{checksum[2:4]}/{checksum}"
     print_op("UPLOAD", file_path)
     s3.upload_file(file_path, bucket_name, str(dest_path))
@@ -202,7 +197,7 @@ def copy_file(local_path: Path, data_path: Path) -> None:
 
     data_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print_op("COPY", f"{local_path} --> {data_path.relative_to(BASE_DIR)}")
+    print_op("ADD", f"{data_path.relative_to(BASE_DIR)}")
     shutil.copy(local_path, data_path)
 
 
@@ -211,7 +206,7 @@ def copy_dir(local_path: Path, data_path: Path) -> None:
 
     data_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print_op("COPY", f"{local_path}/ --> {data_path.relative_to(BASE_DIR)}/")
+    print_op("ADD", f"{data_path.relative_to(BASE_DIR)}/")
     shutil.copytree(local_path, data_path)
 
 
