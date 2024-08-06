@@ -10,62 +10,12 @@ Shelf is an opinionated small-scale ETL framework for managing data files and di
 
 ## Core principles
 
-### A framework
-
-`shelf` is motivated by the desire to take the best bits of [Our World In Data's ETL](https://github.com/owid/etl) and make the core concept reusable for multiple projects.
-
-
-```mermaid
-graph LR
-
-subgraph git-repo
-    metadata
-end
-
-subgraph s3
-    data
-end
-
-metadata --> data
-```
-
-### Metadata included
-
-`shelf` is designed to make space for metadata to be kept about every file, and to propagate that metadata sensibly when it can. This lets you store details about data provenance and data access right next to the data.
-
-🔮 (in future) Bring-your-own JSONSchema for metadata, to meet the standards of your own project
-
-### Merkle tree
-
-- Define your DAG in `shelf.yaml`, keep data in `data/` and step code in `src/steps`, version controlled in Git
-- Each resource that your DAG can build is built off of a chain of checksums that includes data, metadata and scripts
-  - This allows `shelf run` to perform content-aware rebuilds of only data that is out of date
-
-### Data versioning
-
-As well as checksums, all data is versioned by ISO date or by `latest`.
-
-### Snapshots and derived tables
-
-- Snapshot data to make it available to `shelf` and archived in S3
-- Derive tables from snapshots and other tables that meet sensible data standards and form a helpful workflow
-
-### Opinionated workflow for data science
-
-- The core concept for `shelf` is data tables
-  - Tables must use `snake_case` column names and have at least one `dim_` prefixed column indicating a dimension
-  - Tables may have `meta_` prefixed columns indicating metadata
-- 🔮 (in future) Support for an opinionated workflow of steps
-  1. Snapshot and describe the data as it is
-  2. Bring it into a common format and data standards
-  3. Harmonize and clean it
-  4. 🔀 Remix to your heart's content
-
-### Polyglot support
-
-- Support out of the box for arbitrary executable scripts that meet the signature `my_script [dep1 [dep2 [...]] output_table`
-- 🔮 (in-future) Automatic support for Juypter Notebook steps
-- 🔮 (in-future) Automatic support for duckdb steps
+- **A reusable framework.** Shelf provides a structured way of managing data files, scripts and their interdependencies that can be used across multiple projects.
+- **First class metadata.** Every data file has an accompanying metadata sidecar that can be used to store provenance, licensing and other information.
+- **Content addressed.** A `shelf` DAG is a Merkle tree of checksums that includes data, metadata and scripts, used to lazily rebuild only what is out of date.
+- **Data versioning.** Every step in the DAG has a URI that includes a version, which can be an ISO date or `latest`, to encourage a reproducible workflow that still allows for change.
+- **Opinionated workflow.** Shelf encourages an opinionated workflow for data, that encourages you to create tables that are clean, harmonized and remixable, and ultimately let you treat your Shelf as a reliable catalog of data for doing data science work from.
+- **Polyglot.** Shelf is a Python framework, but allows you to write step definitions in the tool of your choice, as long as they meet a simple signature.
 
 ## Usage
 
