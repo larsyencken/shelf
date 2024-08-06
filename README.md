@@ -41,6 +41,10 @@ metadata --> data
 - Each resource that your DAG can build is built off of a chain of checksums that includes data, metadata and scripts
   - This allows `shelf run` to perform content-aware rebuilds of only data that is out of date
 
+### Data versioning
+
+As well as checksums, all data is versioned by ISO date or by `latest`.
+
 ### Snapshots and derived tables
 
 - Snapshot data to make it available to `shelf` and archived in S3
@@ -104,11 +108,9 @@ This will upload the file to your S3-compatible storage, and create a metadata f
 
 The metadata format has some minimum fields, but is meant for you to extend as needed for your own purposes. Best practice would be to retain the provenance and licence information of any data you add to your shelf, especially if it originates from a third party.
 
-### Restoring a file from the shelf
+### Building your shelf
 
-Your shelf is designed to be managed in a git repository, with data stored outside of the repo in S3. This means that on a new machine, you can clone the repo, and run `shelf get` to restore all the data from the shelf.
-
-You can also run `shelf get some_regex` to only fetch files whose dataset name matches the regex.
+Run `shelf run` to fetch any data that's out of date, and build any derived tables.
 
 ## Bugs
 
@@ -118,6 +120,7 @@ Please report any issues at: https://github.com/larsyencken/shelf/issues
 
 - `dev`
   - Initialise a repo with `shelf.yaml`
-  - `shelf add` and `shelf get` with file and directory support
+  - `shelf add` and `shelf run` with file and directory support
   - Only fetch things that are out of date
   - `shelf list` to see what datasets are available
+  - `shelf audit` to ensure your shelf is coherent and correct
