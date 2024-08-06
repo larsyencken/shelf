@@ -29,7 +29,7 @@ end
 metadata --> data
 ```
 
-## Metadata included
+### Metadata included
 
 `shelf` is designed to make space for metadata to be kept about every file, and to propagate that metadata sensibly when it can. This lets you store details about data provenance and data access right next to the data.
 
