@@ -45,7 +45,6 @@ metadata --> data
 
 - Snapshot data to make it available to `shelf` and archived in S3
 - Derive tables from snapshots and other tables that meet sensible data standards and form a helpful workflow
-- 🔮 (in future) Workflow support for 
 
 ### Opinionated workflow for data science
 
