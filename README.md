@@ -63,10 +63,10 @@ Now your shelf is ready to use.
 
 ### Shelving a file or folder
 
-From within your shelf folder, run `shelf add path/to/your/file_or_folder dataset_name` to add a file to your shelf. See the earlier overview for choosing a dataset name.
+From within your shelf folder, run `shelf snapshot path/to/your/file_or_folder dataset_name` to add a file to your shelf. See the earlier overview for choosing a dataset name.
 
 ```
-shelf add ~/Downloads/countries.csv countries/latest
+shelf snapshot ~/Downloads/countries.csv countries/latest
 ```
 
 This will upload the file to your S3-compatible storage, and create a metadata file at `data/<dataset_name>.meta.yaml` directory for you to complete.
