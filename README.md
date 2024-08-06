@@ -6,9 +6,14 @@ Status: in alpha, changing often
 
 ## Overview
 
-Shelf is a library and personal ETL framework for managing small data files and directories in a content-addressable way.
+Shelf is an opinionated small-scale ETL framework for managing data files and directories in a content-addressable way.
 
-Metadata is kept on-disk in a `data/` folder. Data is definitively stored in an S3-compatible store, but fetched locally for processing.
+## Core principles
+
+### A framework
+
+`shelf` is motivated by the desire to take the best bits of [Our World In Data's ETL](https://github.com/owid/etl) and make the core concept reusable for multiple projects.
+
 
 ```mermaid
 graph LR
@@ -24,13 +29,40 @@ end
 metadata --> data
 ```
 
-Every dataset in a shelf is an immutable file or folder with a corresponding metadata file containing its checksum. A dataset is identified by a path, which must end in a `version` (a date or `latest`).
+## Metadata included
 
-For example, valid dataset paths include:
+`shelf` is designed to make space for metadata to be kept about every file, and to propagate that metadata sensibly when it can. This lets you store details about data provenance and data access right next to the data.
 
-- `countries/2020-04-07`
-- `who/covid-19/latest`
-- `some/very/long/qualified/path/2024-07-01`
+🔮 (in future) Bring-your-own JSONSchema for metadata, to meet the standards of your own project
+
+### Merkle tree
+
+- Define your DAG in `shelf.yaml`, keep data in `data/` and step code in `src/steps`, version controlled in Git
+- Each resource that your DAG can build is built off of a chain of checksums that includes data, metadata and scripts
+  - This allows `shelf run` to perform content-aware rebuilds of only data that is out of date
+
+### Snapshots and derived tables
+
+- Snapshot data to make it available to `shelf` and archived in S3
+- Derive tables from snapshots and other tables that meet sensible data standards and form a helpful workflow
+- 🔮 (in future) Workflow support for 
+
+### Opinionated workflow for data science
+
+- The core concept for `shelf` is data tables
+  - Tables must use `snake_case` column names and have at least one `dim_` prefixed column indicating a dimension
+  - Tables may have `meta_` prefixed columns indicating metadata
+- 🔮 (in future) Support for an opinionated workflow of steps
+  1. Snapshot and describe the data as it is
+  2. Bring it into a common format and data standards
+  3. Harmonize and clean it
+  4. 🔀 Remix to your heart's content
+
+### Polyglot support
+
+- Support out of the box for arbitrary executable scripts that meet the signature `my_script [dep1 [dep2 [...]] output_table`
+- 🔮 (in-future) Automatic support for Juypter Notebook steps
+- 🔮 (in-future) Automatic support for duckdb steps
 
 ## Usage
 
