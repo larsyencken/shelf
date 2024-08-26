@@ -70,7 +70,7 @@ Please report any issues at: https://github.com/larsyencken/shelf/issues
 
 - `dev`
   - Initialise a repo with `shelf.yaml`
-  - `shelf add` and `shelf run` with file and directory support
+  - `shelf snapshot` and `shelf run` with file and directory support
   - Only fetch things that are out of date
   - `shelf list` to see what datasets are available
   - `shelf audit` to ensure your shelf is coherent and correct
