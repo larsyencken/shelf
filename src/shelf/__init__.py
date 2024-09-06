@@ -75,6 +75,11 @@ def main():
         nargs="?",
         help="Optional regex to filter dataset names",
     )
+    list_parser.add_argument(
+        "--paths",
+        action="store_true",
+        help="Return relative paths instead of URIs",
+    )
 
     subparsers.add_parser(
         "init", help="Initialize the shelf with the necessary directories"
@@ -101,7 +106,7 @@ def main():
         return
 
     elif args.command == "list":
-        return list_steps_cmd(shelf, args.regex)
+        return list_steps_cmd(shelf, args.regex, args.paths)
 
     elif args.command == "run":
         return plan_and_run(shelf, args.path, args.force, args.dry_run)
@@ -147,16 +152,23 @@ def snapshot_to_shelf(
     return snapshot
 
 
-def list_steps_cmd(shelf: Shelf, regex: Optional[str] = None) -> None:
-    for step in list_steps(shelf, regex):
+def list_steps_cmd(
+    shelf: Shelf, regex: Optional[str] = None, paths: bool = False
+) -> None:
+    for step in list_steps(shelf, regex, paths):
         print(step)
 
 
-def list_steps(shelf: Shelf, regex: Optional[str] = None) -> list[StepURI]:
+def list_steps(
+    shelf: Shelf, regex: Optional[str] = None, paths: bool = False
+) -> list[Path] | list[StepURI]:
     steps = sorted(shelf.steps)
 
     if regex:
         steps = [s for s in steps if re.search(regex, str(s))]
+
+    if paths:
+        steps = [s.rel_path for s in steps]
 
     return steps
 

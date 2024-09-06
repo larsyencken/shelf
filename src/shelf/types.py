@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from functools import total_ordering
 from typing import Literal
 
+from shelf import paths
+
 type Checksum = str
 type FileName = str
 type DatasetName = str
@@ -20,6 +22,20 @@ class StepURI:
     @property
     def uri(self):
         return f"{self.scheme}://{self.path}"
+
+    @property
+    def full_path(self):
+        if self.scheme == "snapshot":
+            return paths.SNAPSHOT_DIR / self.path
+
+        elif self.scheme == "table":
+            return paths.TABLE_DIR / self.path
+
+        raise ValueError(f'no common directory found for scheme "{self.scheme}"')
+
+    @property
+    def rel_path(self):
+        return self.full_path.relative_to(paths.BASE_DIR)
 
     @classmethod
     def parse(cls, uri: str) -> "StepURI":
