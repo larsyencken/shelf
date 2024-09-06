@@ -72,6 +72,7 @@ def dump_yaml_with_comments(obj: dict, f) -> None:
         else:
             yaml.dump({key: value}, f, sort_keys=False)
 
+
 def save_yaml(obj: dict, path: Path, include_comments: bool = False) -> None:
     if path.exists():
         print_op("UPDATE", path)
