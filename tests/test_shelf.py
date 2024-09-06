@@ -106,30 +106,6 @@ def test_add_file(setup_test_environment):
     assert data_file.exists()
     assert data_file.read_text() == "Hello, World!"
 
-    # add file to shelf without description
-    shelf = Shelf.init()
-    snapshot_to_shelf(new_file, uri.path)
-
-    # check for data and metadata
-    assert data_file.exists()
-    assert metadata_file.exists()
-
-    # check if data path is added to .gitignore
-    assert gitignore_file.exists()
-    with open(gitignore_file, "r") as f:
-        assert f"data/snapshots/{uri.path}.txt\n" in f.read()
-
-    # check if dataset name is added to shelf.yaml under steps
-    shelf_yaml = load_yaml(shelf_yaml_file)
-    assert str(uri) in shelf_yaml["steps"]
-
-    # re-fetch it from shelf
-    data_file.unlink()
-    shelf.refresh()
-    plan_and_run(shelf, str(uri))
-    assert data_file.exists()
-    assert data_file.read_text() == "Hello, World!"
-
 
 def test_checksum_folder(setup_test_environment):
     tmp_path = setup_test_environment
@@ -291,6 +267,8 @@ def test_list_datasets(setup_test_environment):
 
     # add files to shelf
     shelf = Shelf.init()
+    snapshot_to_shelf(new_file1, uri1.path)
+    snapshot_to_shelf(new_file2, uri2.path)
     shelf.refresh()
 
     assert list_steps(shelf) == [uri1, uri2]

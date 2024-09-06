@@ -162,7 +162,7 @@ def snapshot_to_shelf(
     shelf = Shelf()
     proposed_uri = StepURI("snapshot", dataset_name)
     if proposed_uri in shelf.steps:
-        raise ValueError("Dataset already exists in shelf: {proposed_uri}")
+        raise ValueError(f"Dataset already exists in shelf: {proposed_uri}")
 
     # create and add to s3
     print(f"Creating {proposed_uri}")
