@@ -26,6 +26,9 @@
     "name": {
       "type": "string"
     },
+    "description": {
+      "type": "string"
+    },
     "source_name": {
       "type": "string"
     },

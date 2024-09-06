@@ -93,7 +93,7 @@ def _gen_metadata(uri: StepURI, dependencies: list[StepURI]) -> None:
             "access_notes",
         ]:
             if field in dep_metadata:
-                metadata[field] = dep_metadata[field]
+                metadata[field] = str(dep_metadata[field])
 
     metadata["schema"] = _infer_schema(uri)
 
@@ -163,9 +163,9 @@ def _infer_schema(uri: StepURI) -> dict[str, str]:
     return {col: str(dtype) for col, dtype in df.schema.items()}
 
 
-def _get_executable(uri: StepURI) -> Path:
+def _get_executable(uri: StepURI, check: bool = True) -> Path:
     executable = (TABLE_SCRIPT_DIR / uri.path).with_suffix("")
-    if not _is_valid_script(executable):
+    if check and not _is_valid_script(executable):
         if _is_valid_script(executable.parent):
             executable = executable.parent
         else:
@@ -174,3 +174,60 @@ def _get_executable(uri: StepURI) -> Path:
             )
 
     return executable
+
+
+def add_placeholder_script(uri: StepURI) -> Path:
+    script_path = _get_executable(uri, check=False)
+    if script_path.exists():
+        raise ValueError(f"Script already exists: {script_path}")
+
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = Path(uri.path).suffix
+
+    if suffix == ".csv":
+        content = """#!/bin/bash
+output_file="${!#}"
+cat << EOF > "$output_file"
+a,b,c
+1,2,3
+1,3,4
+3,5,6
+"""
+
+    elif suffix == ".jsonl":
+        content = """#!/bin/bash
+output_file="${!#}"
+cat << EOF > "$output_file"
+{"a": 1, "b": 2, "c": 3}
+{"a": 1, "b": 3, "c": 4}
+{"a": 3, "b": 5, "c": 6}
+"""
+
+    elif suffix == ".feather":
+        content = """#!/usr/bin/env python3
+import sys
+
+import polars as pl
+import sys
+import polars as pl
+import sys
+import json
+
+data = {
+    "a": [1, 1, 3],
+    "b": [2, 3, 5],
+    "c": [3, 4, 6]
+}
+
+df = pl.DataFrame(data)
+
+output_file = sys.argv[-1]
+df.write_ipc(output_file)
+"""
+    else:
+        raise ValueError(f"Unsupported table format: {script_path.suffix}")
+
+    script_path.write_text(content)
+    script_path.chmod(0o755)
+
+    return script_path

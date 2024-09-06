@@ -4,6 +4,7 @@ from pathlib import Path
 import jsonschema
 
 from shelf.schemas import SHELF_SCHEMA
+from shelf.tables import add_placeholder_script
 from shelf.types import Dag, StepURI
 from shelf.utils import load_yaml, save_yaml
 
@@ -59,3 +60,13 @@ class Shelf:
         }
         jsonschema.validate(config, SHELF_SCHEMA)
         save_yaml(config, self.config_file)
+
+    def new_table(self, table_path: str, dependencies: list[str]) -> None:
+        table_uri = StepURI("table", table_path)
+        if table_uri in self.steps:
+            raise ValueError(f"Table already exists in shelf: {table_uri}")
+
+        add_placeholder_script(table_uri)
+
+        self.steps[table_uri] = [StepURI.parse(dep) for dep in dependencies]
+        self.save()

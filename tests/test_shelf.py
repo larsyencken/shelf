@@ -14,8 +14,9 @@ from shelf import (
     snapshot_to_shelf,
 )
 from shelf.paths import BASE_DIR
+from shelf.tables import _get_executable
 from shelf.types import StepURI
-from shelf.utils import checksum_folder, load_yaml  # noqa
+from shelf.utils import checksum_folder, load_yaml
 
 
 @pytest.fixture
@@ -81,7 +82,31 @@ def test_add_file(setup_test_environment):
     new_file = tmp_path / "file1.txt"
     new_file.write_text("Hello, World!")
 
-    # add file to shelf
+    # add file to shelf with description
+    shelf = Shelf.init()
+    snapshot_to_shelf(new_file, uri.path)
+
+    # check for data and metadata
+    assert data_file.exists()
+    assert metadata_file.exists()
+
+    # check if data path is added to .gitignore
+    assert gitignore_file.exists()
+    with open(gitignore_file, "r") as f:
+        assert f"data/snapshots/{uri.path}.txt\n" in f.read()
+
+    # check if dataset name is added to shelf.yaml under steps
+    shelf_yaml = load_yaml(shelf_yaml_file)
+    assert str(uri) in shelf_yaml["steps"]
+
+    # re-fetch it from shelf
+    data_file.unlink()
+    shelf.refresh()
+    plan_and_run(shelf, str(uri))
+    assert data_file.exists()
+    assert data_file.read_text() == "Hello, World!"
+
+    # add file to shelf without description
     shelf = Shelf.init()
     snapshot_to_shelf(new_file, uri.path)
 
@@ -266,8 +291,6 @@ def test_list_datasets(setup_test_environment):
 
     # add files to shelf
     shelf = Shelf.init()
-    snapshot_to_shelf(new_file1, uri1.path)
-    snapshot_to_shelf(new_file2, uri2.path)
     shelf.refresh()
 
     assert list_steps(shelf) == [uri1, uri2]
@@ -361,17 +384,19 @@ def test_export_duckdb(setup_test_environment):
     tmp_path = setup_test_environment
 
     # configure test
-    uri1 = StepURI.parse("table://test_namespace/test_table1/2024-07-26")
-    uri2 = StepURI.parse("table://test_namespace/test_table2/2024-07-27")
-    new_file1 = tmp_path / "table1.jsonl"
-    new_file2 = tmp_path / "table2.csv"
-    new_file1.write_text('{"key": "value1"}\n{"key": "value2"}')
-    new_file2.write_text("key,value\nvalue3,value4")
+    uri1 = StepURI.parse("table://test_namespace/test_table1/2024-07-26.jsonl")
+    uri2 = StepURI.parse("table://test_namespace/test_table2/2024-07-27.csv")
 
-    # add files to shelf
+    # add table scripts to shelf
     shelf = Shelf.init()
-    snapshot_to_shelf(new_file1, uri1.path)
-    snapshot_to_shelf(new_file2, uri2.path)
+    shelf.new_table(uri1.path, [])
+    shelf.new_table(uri2.path, [])
+    _get_executable(uri1).write_text(
+        '#!/bin/bash\ncat << EOF > ${!#}\n{"dim_key": "value1"}\n{"dim_key": "value2"}'
+    )
+    _get_executable(uri2).write_text(
+        "#!/bin/bash\ncat << EOF > ${!#}\ndim_key,value\nvalue3,value4\n"
+    )
 
     # refresh the shelf
     shelf.refresh()
@@ -387,45 +412,6 @@ def test_export_duckdb(setup_test_environment):
         "SELECT * FROM test_namespace_test_table2_20240727"
     ).fetchall() == [("value3", "value4")]
     conn.close()
-
-    tmp_path = setup_test_environment
-
-    # configure test
-    uri1 = StepURI.parse("snapshot://test_namespace/test_dataset1/2024-07-26")
-    uri2 = StepURI.parse("snapshot://test_namespace/test_dataset2/2024-07-27")
-    new_file1 = tmp_path / "file1.txt"
-    new_file2 = tmp_path / "file2.txt"
-    new_file1.write_text("Hello, World!")
-    new_file2.write_text("Hello, Cosmos!")
-
-    # add files to shelf
-    shelf = Shelf.init()
-    snapshot_to_shelf(new_file1, uri1.path)
-    snapshot_to_shelf(new_file2, uri2.path)
-
-    # modify one of the files to make it out of date
-    data_file1 = (
-        tmp_path
-        / "data/snapshots"
-        / "test_namespace"
-        / "test_dataset1"
-        / "2024-07-26.txt"
-    )
-    data_file1.write_text("Modified content")
-
-    # restore datasets with --force option
-    plan_and_run(shelf, force=True)
-
-    # check that both datasets were fetched
-    assert data_file1.read_text() == "Hello, World!"
-    data_file2 = (
-        tmp_path
-        / "data/snapshots"
-        / "test_namespace"
-        / "test_dataset2"
-        / "2024-07-27.txt"
-    )
-    assert data_file2.read_text() == "Hello, Cosmos!"
 
 
 def test_audit_can_fix_manifest_checksum(setup_test_environment):

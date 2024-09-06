@@ -57,6 +57,32 @@ This will upload the file to your S3-compatible storage, and create a metadata f
 
 The metadata format has some minimum fields, but is meant for you to extend as needed for your own purposes. Best practice would be to retain the provenance and licence information of any data you add to your shelf, especially if it originates from a third party.
 
+### Creating a new table
+
+To create a new table, use the `shelf new-table <table-path> [dep1 [dep2 [...]]` command. This command will create a placeholder executable script that generates an example data file of the given type based on the file extension (.csv, .jsonl, .feather).
+
+For example, to create a new table with a CSV placeholder script:
+
+```
+shelf new-table path/to/your/table.csv
+```
+
+This will create a placeholder script that generates an example CSV file with the following content:
+
+```
+#!/usr/bin/env tail +2
+a,b,c
+1,2,3
+1,3,4
+3,5,6
+```
+
+The command also supports the `--edit` option to open the metadata file for the table in your editor:
+
+```
+shelf new-table path/to/your/table.csv --edit
+```
+
 ### Building your shelf
 
 Run `shelf run` to fetch any data that's out of date, and build any derived tables.

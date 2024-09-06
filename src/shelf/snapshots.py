@@ -39,6 +39,7 @@ class Snapshot:
     extension: Optional[str] = None
 
     name: Optional[str] = None
+    description: Optional[str] = None
     source_name: Optional[str] = None
     source_url: Optional[str] = None
     date_accessed: Optional[str] = None

@@ -13,6 +13,7 @@ from shelf import steps
 from shelf.core import Shelf
 from shelf.exceptions import StepDefinitionError
 from shelf.snapshots import Snapshot
+from shelf.tables import add_placeholder_script
 from shelf.types import StepURI
 from shelf.utils import add_to_gitignore, checksum_manifest, console
 
@@ -102,6 +103,19 @@ def main():
         "db_file", type=str, help="Path to the DuckDB file to export tables to"
     )
 
+    new_table_parser = subparsers.add_parser(
+        "new-table", help="Create a new table with optional dependencies"
+    )
+    new_table_parser.add_argument("table_path", type=str, help="Path to the new table")
+    new_table_parser.add_argument(
+        "dependencies", type=str, nargs="*", help="Optional dependencies for the table"
+    )
+    new_table_parser.add_argument(
+        "--edit",
+        action="store_true",
+        help="Edit the metadata file in an interactive editor.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -124,6 +138,9 @@ def main():
 
     elif args.command == "export-duckdb":
         return export_duckdb(shelf, args.db_file)
+
+    elif args.command == "new-table":
+        return new_table(shelf, args.table_path, args.dependencies, args.edit)
 
     parser.print_help()
 
@@ -271,6 +288,19 @@ def audit_step(step: StepURI, fix: bool = False) -> None:
             raise StepDefinitionError(
                 f"Checksum mismatch for {step} of type 'directory'"
             )
+
+
+def new_table(
+    shelf: Shelf, table_path: str, dependencies: list[str], edit: bool = False
+) -> None:
+    table_uri = StepURI("table", table_path)
+    if table_uri in shelf.steps:
+        raise ValueError(f"Table already exists in shelf: {table_uri}")
+
+    add_placeholder_script(table_uri)
+
+    shelf.steps[table_uri] = [StepURI.parse(dep) for dep in dependencies]
+    shelf.save()
 
 
 def _maybe_add_version(dataset_name: str) -> str:
