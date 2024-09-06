@@ -16,7 +16,7 @@ import boto3
 import jsonschema
 
 from shelf.paths import BASE_DIR, SNAPSHOT_DIR
-from shelf.schemas import SNAPSHOT_SCHEMA
+from shelf.schemas import SNAPSHOT_SCHEMA, validate_snapshot
 from shelf.types import Checksum, DatasetName, FileName, Manifest, StepURI
 from shelf.utils import (
     checksum_file,
@@ -106,16 +106,14 @@ class Snapshot:
     def save(self):
         # prep the metadata record
         record = self.to_dict()
-        jsonschema.validate(record, SNAPSHOT_SCHEMA)
+        validate_snapshot(record)
 
-        save_yaml(record, self.metadata_path)
+        save_yaml(record, self.metadata_path, include_comments=True)
 
     def to_dict(self) -> dict:
         record = asdict(self)
         record["uri"] = str(self.uri)
-        for k in [k for k, v in record.items() if v is None]:
-            del record[k]
-
+        # Include all fields, even if they are None
         return record
 
     @staticmethod
