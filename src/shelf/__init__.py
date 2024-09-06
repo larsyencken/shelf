@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import duckdb
 from dotenv import load_dotenv
 
 from shelf import steps
@@ -94,6 +95,13 @@ def main():
         help="Fix the overall checksum for snapshot steps with snapshot_type of directory if it is wrong",
     )
 
+    export_parser = subparsers.add_parser(
+        "export-duckdb", help="Export tables to a DuckDB file"
+    )
+    export_parser.add_argument(
+        "db_file", type=str, help="Path to the DuckDB file to export tables to"
+    )
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -113,6 +121,9 @@ def main():
 
     elif args.command == "audit":
         return audit_shelf(shelf, args.fix)
+
+    elif args.command == "export-duckdb":
+        return export_duckdb(shelf, args.db_file)
 
     parser.print_help()
 
@@ -199,12 +210,29 @@ def plan_and_run(
     steps.execute_dag(dag, dry_run=dry_run)
 
 
-def audit_shelf_cmd(shelf: Shelf, fix: bool = False) -> None:
-    try:
-        audit_shelf(shelf, fix)
-    except Exception as e:
-        print(e)
-        exit(1)
+def export_duckdb(shelf: Shelf, db_file: str) -> None:
+    # Ensure all tables are built
+    plan_and_run(shelf)
+
+    # Connect to DuckDB
+    conn = duckdb.connect(db_file)
+
+    for step in shelf.steps:
+        if step.scheme == "table":
+            table_name = step.path.replace("/", "_").replace("-", "").rsplit(".", 1)[0]
+            table_path = Path("data/tables") / step.path
+
+            if table_path.suffix == ".jsonl":
+                conn.execute(
+                    f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{table_path}')"
+                )
+
+            elif table_path.suffix == ".csv":
+                conn.execute(
+                    f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_csv_auto('{table_path}')"
+                )
+
+    conn.close()
 
 
 def audit_shelf(shelf: Shelf, fix: bool = False) -> None:

@@ -2,9 +2,17 @@ import os
 import shutil
 from pathlib import Path
 
+import duckdb
 import pytest
 import yaml
-from shelf import Shelf, audit_shelf, list_steps, plan_and_run, snapshot_to_shelf
+from shelf import (
+    Shelf,
+    audit_shelf,
+    export_duckdb,
+    list_steps,
+    plan_and_run,
+    snapshot_to_shelf,
+)
 from shelf.paths import BASE_DIR
 from shelf.types import StepURI
 from shelf.utils import checksum_folder, load_yaml  # noqa
@@ -349,7 +357,37 @@ def test_get_only_out_of_date_datasets(setup_test_environment):
     assert data_file2.read_text() == "Hello, Cosmos!"
 
 
-def test_get_with_force_option(setup_test_environment):
+def test_export_duckdb(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    uri1 = StepURI.parse("table://test_namespace/test_table1/2024-07-26")
+    uri2 = StepURI.parse("table://test_namespace/test_table2/2024-07-27")
+    new_file1 = tmp_path / "table1.jsonl"
+    new_file2 = tmp_path / "table2.csv"
+    new_file1.write_text('{"key": "value1"}\n{"key": "value2"}')
+    new_file2.write_text("key,value\nvalue3,value4")
+
+    # add files to shelf
+    shelf = Shelf.init()
+    snapshot_to_shelf(new_file1, uri1.path)
+    snapshot_to_shelf(new_file2, uri2.path)
+
+    # refresh the shelf
+    shelf.refresh()
+    db_file = tmp_path / "test.duckdb"
+    export_duckdb(shelf, str(db_file))
+
+    # verify tables in DuckDB
+    conn = duckdb.connect(str(db_file))
+    assert conn.execute(
+        "SELECT * FROM test_namespace_test_table1_20240726"
+    ).fetchall() == [("value1",), ("value2",)]
+    assert conn.execute(
+        "SELECT * FROM test_namespace_test_table2_20240727"
+    ).fetchall() == [("value3", "value4")]
+    conn.close()
+
     tmp_path = setup_test_environment
 
     # configure test
