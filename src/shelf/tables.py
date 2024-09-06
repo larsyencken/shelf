@@ -217,5 +217,7 @@ df.write_ipc(output_file)
     else:
         raise ValueError(f"Unsupported table format: {script_path.suffix}")
 
+    return script_path
+
     script_path.write_text(content)
     script_path.chmod(0o755)
