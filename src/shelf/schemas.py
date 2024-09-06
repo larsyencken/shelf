@@ -1,4 +1,5 @@
 import json
+import jsonschema
 from pathlib import Path
 
 SNAPSHOT_SCHEMA_FILE = Path(__file__).parent / "snapshot-v1.schema.json"

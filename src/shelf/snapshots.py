@@ -16,7 +16,7 @@ import boto3
 import jsonschema
 
 from shelf.paths import BASE_DIR, SNAPSHOT_DIR
-from shelf.schemas import SNAPSHOT_SCHEMA
+from shelf.schemas import SNAPSHOT_SCHEMA, validate_snapshot
 from shelf.types import Checksum, DatasetName, FileName, Manifest, StepURI
 from shelf.utils import (
     checksum_file,
