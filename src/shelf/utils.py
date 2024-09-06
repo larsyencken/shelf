@@ -65,6 +65,13 @@ def add_to_gitignore(path: Path) -> None:
         print(path.relative_to(BASE_DIR), file=f)
 
 
+def dump_yaml_with_comments(obj: dict, f) -> None:
+    for key, value in obj.items():
+        if value is None:
+            f.write(f"# {key}: \n")
+        else:
+            yaml.dump({key: value}, f, sort_keys=False)
+
 def save_yaml(obj: dict, path: Path, include_comments: bool = False) -> None:
     if path.exists():
         print_op("UPDATE", path)
@@ -73,11 +80,7 @@ def save_yaml(obj: dict, path: Path, include_comments: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         if include_comments:
-            for key, value in obj.items():
-                if value is None:
-                    f.write(f"# {key}: \n")
-                else:
-                    yaml.dump({key: value}, f, sort_keys=False)
+            dump_yaml_with_comments(obj, f)
         else:
             yaml.dump(obj, f, sort_keys=False)
 
