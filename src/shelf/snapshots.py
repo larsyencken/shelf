@@ -106,7 +106,7 @@ class Snapshot:
     def save(self):
         # prep the metadata record
         record = self.to_dict()
-        jsonschema.validate(record, SNAPSHOT_SCHEMA)
+        validate_snapshot(record)
 
         save_yaml(record, self.metadata_path, include_comments=True)
 
