@@ -108,14 +108,12 @@ class Snapshot:
         record = self.to_dict()
         jsonschema.validate(record, SNAPSHOT_SCHEMA)
 
-        save_yaml(record, self.metadata_path)
+        save_yaml(record, self.metadata_path, include_comments=True)
 
     def to_dict(self) -> dict:
         record = asdict(self)
         record["uri"] = str(self.uri)
-        for k in [k for k, v in record.items() if v is None]:
-            del record[k]
-
+        # Include all fields, even if they are None
         return record
 
     @staticmethod
