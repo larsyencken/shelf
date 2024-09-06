@@ -570,3 +570,83 @@ def test_cache_miss(setup_test_environment):
     plan_and_run(shelf, str(uri))
     assert data_file.exists()
     assert data_file.read_text() == "Hello, World!"
+
+
+def test_new_table_command_creates_placeholder_script(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    table_path = "test_namespace/test_table.csv"
+    table_script_path = tmp_path / "src/steps/tables" / table_path
+    shelf_yaml_file = tmp_path / "shelf.yaml"
+
+    # create new table
+    shelf = Shelf.init()
+    shelf.new_table(table_path, [])
+
+    # check if placeholder script is created
+    assert table_script_path.exists()
+    assert table_script_path.read_text() == """#!/usr/bin/env tail +2
+a,b,c
+1,2,3
+1,3,4
+3,5,6
+"""
+
+    # check if table is added to shelf.yaml under steps
+    shelf_yaml = load_yaml(shelf_yaml_file)
+    assert f"table://{table_path}" in shelf_yaml["steps"]
+
+
+def test_new_table_command_creates_placeholder_script_with_dependencies(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    table_path = "test_namespace/test_table.csv"
+    table_script_path = tmp_path / "src/steps/tables" / table_path
+    shelf_yaml_file = tmp_path / "shelf.yaml"
+    dependencies = ["snapshot://test_namespace/test_dataset/2024-07-26"]
+
+    # create new table
+    shelf = Shelf.init()
+    shelf.new_table(table_path, dependencies)
+
+    # check if placeholder script is created
+    assert table_script_path.exists()
+    assert table_script_path.read_text() == """#!/usr/bin/env tail +2
+a,b,c
+1,2,3
+1,3,4
+3,5,6
+"""
+
+    # check if table is added to shelf.yaml under steps with dependencies
+    shelf_yaml = load_yaml(shelf_yaml_file)
+    assert f"table://{table_path}" in shelf_yaml["steps"]
+    assert shelf_yaml["steps"][f"table://{table_path}"] == dependencies
+
+
+def test_new_table_command_creates_placeholder_script_with_edit_option(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    table_path = "test_namespace/test_table.csv"
+    table_script_path = tmp_path / "src/steps/tables" / table_path
+    shelf_yaml_file = tmp_path / "shelf.yaml"
+
+    # create new table with edit option
+    shelf = Shelf.init()
+    shelf.new_table(table_path, [], edit=True)
+
+    # check if placeholder script is created
+    assert table_script_path.exists()
+    assert table_script_path.read_text() == """#!/usr/bin/env tail +2
+a,b,c
+1,2,3
+1,3,4
+3,5,6
+"""
+
+    # check if table is added to shelf.yaml under steps
+    shelf_yaml = load_yaml(shelf_yaml_file)
+    assert f"table://{table_path}" in shelf_yaml["steps"]
