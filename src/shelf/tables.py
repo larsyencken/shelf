@@ -93,7 +93,7 @@ def _gen_metadata(uri: StepURI, dependencies: list[StepURI]) -> None:
             "access_notes",
         ]:
             if field in dep_metadata:
-                metadata[field] = dep_metadata[field]
+                metadata[field] = str(dep_metadata[field])
 
     metadata["schema"] = _infer_schema(uri)
 
@@ -182,26 +182,36 @@ def add_placeholder_script(uri: StepURI) -> Path:
         raise ValueError(f"Script already exists: {script_path}")
 
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    suffix = script_path.suffix
+    suffix = Path(uri.path).suffix
 
     if suffix == ".csv":
-        content = """#!/usr/bin/env tail +2
+        content = """#!/bin/bash
+output_file="${!#}"
+cat << EOF > "$output_file"
 a,b,c
 1,2,3
 1,3,4
 3,5,6
 """
+
     elif suffix == ".jsonl":
-        content = """#!/usr/bin/env tail +2
+        content = """#!/bin/bash
+output_file="${!#}"
+cat << EOF > "$output_file"
 {"a": 1, "b": 2, "c": 3}
 {"a": 1, "b": 3, "c": 4}
 {"a": 3, "b": 5, "c": 6}
 """
+
     elif suffix == ".feather":
         content = """#!/usr/bin/env python3
 import sys
 
 import polars as pl
+import sys
+import polars as pl
+import sys
+import json
 
 data = {
     "a": [1, 1, 3],
@@ -217,7 +227,8 @@ df.write_ipc(output_file)
     else:
         raise ValueError(f"Unsupported table format: {script_path.suffix}")
 
-    return script_path
-
     script_path.write_text(content)
+    Path("/Users/lars/example").write_text(content)
     script_path.chmod(0o755)
+
+    return script_path

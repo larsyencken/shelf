@@ -13,6 +13,7 @@ from shelf import steps
 from shelf.core import Shelf
 from shelf.exceptions import StepDefinitionError
 from shelf.snapshots import Snapshot
+from shelf.tables import add_placeholder_script
 from shelf.types import StepURI
 from shelf.utils import add_to_gitignore, checksum_manifest, console
 
@@ -105,9 +106,7 @@ def main():
     new_table_parser = subparsers.add_parser(
         "new-table", help="Create a new table with optional dependencies"
     )
-    new_table_parser.add_argument(
-        "table_path", type=str, help="Path to the new table"
-    )
+    new_table_parser.add_argument("table_path", type=str, help="Path to the new table")
     new_table_parser.add_argument(
         "dependencies", type=str, nargs="*", help="Optional dependencies for the table"
     )
@@ -291,47 +290,14 @@ def audit_step(step: StepURI, fix: bool = False) -> None:
             )
 
 
-def new_table(shelf: Shelf, table_path: str, dependencies: list[str], edit: bool = False) -> None:
+def new_table(
+    shelf: Shelf, table_path: str, dependencies: list[str], edit: bool = False
+) -> None:
     table_uri = StepURI("table", table_path)
     if table_uri in shelf.steps:
         raise ValueError(f"Table already exists in shelf: {table_uri}")
 
-    table_script_path = Path("src/steps/tables") / table_path
-    table_script_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if table_script_path.suffix == ".csv":
-        content = """#!/usr/bin/env tail +2
-a,b,c
-1,2,3
-1,3,4
-3,5,6
-"""
-    elif table_script_path.suffix == ".jsonl":
-        content = """#!/usr/bin/env tail +2
-{"a": 1, "b": 2, "c": 3}
-{"a": 1, "b": 3, "c": 4}
-{"a": 3, "b": 5, "c": 6}
-"""
-    elif table_script_path.suffix == ".feather":
-        content = """#!/usr/bin/env python3
-import pandas as pd
-
-df = pd.DataFrame({
-    'a': [1, 1, 3],
-    'b': [2, 3, 5],
-    'c': [3, 4, 6]
-})
-
-df.to_feather('table.feather')
-"""
-    else:
-        raise ValueError(f"Unsupported table format: {table_script_path.suffix}")
-
-    table_script_path.write_text(content)
-    table_script_path.chmod(0o755)
-
-    if edit:
-        subprocess.run(["vim", table_script_path])
+    add_placeholder_script(table_uri)
 
     shelf.steps[table_uri] = [StepURI.parse(dep) for dep in dependencies]
     shelf.save()
