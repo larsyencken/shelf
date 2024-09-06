@@ -59,3 +59,45 @@ class Shelf:
         }
         jsonschema.validate(config, SHELF_SCHEMA)
         save_yaml(config, self.config_file)
+
+    def new_table(self, table_path: str, dependencies: list[str]) -> None:
+        table_uri = StepURI("table", table_path)
+        if table_uri in self.steps:
+            raise ValueError(f"Table already exists in shelf: {table_uri}")
+
+        table_script_path = Path("src/steps/tables") / table_path
+        table_script_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if table_script_path.suffix == ".csv":
+            content = """#!/usr/bin/env tail +2
+a,b,c
+1,2,3
+1,3,4
+3,5,6
+"""
+        elif table_script_path.suffix == ".jsonl":
+            content = """#!/usr/bin/env tail +2
+{"a": 1, "b": 2, "c": 3}
+{"a": 1, "b": 3, "c": 4}
+{"a": 3, "b": 5, "c": 6}
+"""
+        elif table_script_path.suffix == ".feather":
+            content = """#!/usr/bin/env python3
+import pandas as pd
+
+df = pd.DataFrame({
+    'a': [1, 1, 3],
+    'b': [2, 3, 5],
+    'c': [3, 4, 6]
+})
+
+df.to_feather('table.feather')
+"""
+        else:
+            raise ValueError(f"Unsupported table format: {table_script_path.suffix}")
+
+        table_script_path.write_text(content)
+        table_script_path.chmod(0o755)
+
+        self.steps[table_uri] = [StepURI.parse(dep) for dep in dependencies]
+        self.save()

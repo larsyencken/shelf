@@ -634,9 +634,9 @@ def test_new_table_command_creates_placeholder_script_with_edit_option(setup_tes
     table_script_path = tmp_path / "src/steps/tables" / table_path
     shelf_yaml_file = tmp_path / "shelf.yaml"
 
-    # create new table with edit option
+    # create new table
     shelf = Shelf.init()
-    shelf.new_table(table_path, [], edit=True)
+    shelf.new_table(table_path, [])
 
     # check if placeholder script is created
     assert table_script_path.exists()
