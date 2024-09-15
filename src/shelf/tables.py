@@ -1,6 +1,6 @@
 import os
-import sys
 import subprocess
+import sys
 from pathlib import Path
 
 import jsonschema
@@ -129,14 +129,17 @@ def is_completed(uri: StepURI) -> bool:
     assert uri.scheme == "table"
 
     # the easy case; is it missing?
-    if not (TABLE_DIR / f"{uri.path}.parquet").exists() or not _metadata_path(uri).exists():
+    if (
+        not (TABLE_DIR / f"{uri.path}.parquet").exists()
+        or not _metadata_path(uri).exists()
+    ):
         return False
 
     # it's there, but is it up to date? check the manifest
     metadata = load_yaml(_metadata_path(uri))
     input_manifest = metadata["input_manifest"]
     for path, checksum in input_manifest.items():
-        if checksum != checksum_file(path):
+        if not Path(path).exists() or checksum != checksum_file(path):
             return False
 
     return True
