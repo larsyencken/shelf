@@ -59,7 +59,7 @@ The metadata format has some minimum fields, but is meant for you to extend as n
 
 ### Creating a new table
 
-To create a new table, use the `shelf new-table <table-path> [dep1 [dep2 [...]]` command. This command will create a placeholder executable script that generates an example data file of the given type based on the file extension (.parquet).
+To create a new table, use the `shelf new-table <table-path> [dep1 [dep2 [...]]` command. This command will create a placeholder executable script that generates an example data file of the given type based on the file extension (.parquet or .sql).
 
 For example, to create a new table with a Parquet placeholder script:
 
@@ -86,11 +86,35 @@ output_file = sys.argv[-1]
 df.write_parquet(output_file)
 ```
 
+For example, to create a new table with a SQL placeholder script:
+
+```
+shelf new-table path/to/your/table.sql
+```
+
+This will create a placeholder script that generates an example SQL file with the following content:
+
+```
+-- SQL script to create a table
+CREATE TABLE example_table AS
+SELECT
+    1 AS a,
+    2 AS b,
+    3 AS c
+```
+
 The command also supports the `--edit` option to open the metadata file for the table in your editor:
 
 ```
 shelf new-table path/to/your/table --edit
 ```
+
+### Executing SQL step definitions
+
+If a `.sql` step definition is detected, it will be executed using DuckDB with an in-memory database. The SQL file can use `{variable}` to interpolate template variables. The following template variables are available:
+
+- `{output_file}`: The path to the output file.
+- `{dependency}`: The path of each dependency, simplified to a semantic name.
 
 ### Building your shelf
 

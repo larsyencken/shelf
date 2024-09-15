@@ -1,8 +1,11 @@
 import os
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
+from typing import Iterator
 
+import duckdb
 import jsonschema
 import polars as pl
 
@@ -54,12 +57,77 @@ def _exec_command(uri: StepURI, command: list[Path]) -> None:
         dest_path.unlink()
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    command_s = [sys.executable] + [str(p.resolve()) for p in command]
-
-    subprocess.run(command_s, check=True)
+    if command[0].suffix == ".sql":
+        _exec_sql_command(uri, command)
+    else:
+        _exec_python_command(uri, command)
 
     if not dest_path.exists():
         raise Exception(f"Table step {uri} did not generate the expected {dest_path}")
+
+
+def _exec_python_command(uri: StepURI, command: list[Path]) -> None:
+    command_s = [sys.executable] + [str(p.resolve()) for p in command]
+    subprocess.run(command_s, check=True)
+
+
+def _exec_sql_command(uri: StepURI, command: list[Path]) -> None:
+    sql_file = command[0]
+    output_file = command[-1]
+
+    template_vars = _simplify_dependency_names(command[1:-1])
+
+    with open(sql_file, "r") as f:
+        sql = f.read().format(**template_vars)
+
+    con = duckdb.connect(database=":memory:")
+    print(sql)
+    con.execute(sql)
+    con.execute(f"COPY data TO '{output_file}' (FORMAT 'parquet')")
+
+
+def _generate_candidate_names(dep: Path) -> Iterator[str]:
+    parts = dep.parts
+    name = parts[-2]
+    yield name
+
+    candidates = [name]
+    for p in reversed(parts[:-2]):
+        name = f"{p}_{name}"
+        yield name
+
+    version = parts[-1].replace("-", "")
+    candidates.append(f"{name}_{version}")
+    while True:
+        yield name
+
+
+def _simplify_dependency_names(deps: list[Path]) -> dict[str, Path]:
+    mapping = {}
+
+    to_map = {d: iter(_generate_candidate_names(d)) for d in deps}
+
+    frontier = {d: next(to_map[d]) for d in deps}
+    duplicates = {k for k, v in Counter(frontier.values()).items() if v >= 2}
+
+    for d, name in list(frontier.items()):
+        if d not in duplicates:
+            mapping[name] = d
+            del frontier[d]
+
+    last_duplicates = duplicates
+    while duplicates:
+        frontier = {d: next(to_map[d]) for d in list(frontier)}
+        duplicates = {k for k, v in Counter(frontier.values()).items() if v >= 2}
+        if duplicates == last_duplicates:
+            raise Exception(f"infinite loop resolving dependencies: {deps}")
+
+        for d, name in list(frontier.items()):
+            if d not in duplicates:
+                mapping[name] = d
+                del frontier[d]
+
+    return mapping
 
 
 def _metadata_path(uri: StepURI) -> Path:
@@ -152,16 +220,19 @@ def _infer_schema(uri: StepURI) -> dict[str, str]:
 
 
 def _get_executable(uri: StepURI, check: bool = True) -> Path:
-    executable = (TABLE_SCRIPT_DIR / uri.path).with_suffix(".py")
-    if check and not _is_valid_script(executable):
-        if _is_valid_script(executable.parent):
-            executable = executable.parent
-        else:
-            raise FileNotFoundError(
-                f"No executable script found for table step {uri} at {executable} or {executable.parent}"
-            )
+    base = TABLE_SCRIPT_DIR / uri.path
 
-    return executable
+    if base.with_suffix(".py").exists():
+        if check and not _is_valid_script(base.with_suffix(".py")):
+            raise Exception(f'Missing execute permissions on {base.with_suffix(".py")}')
+
+        return base.with_suffix(".py")
+
+    elif base.with_suffix(".sql").exists():
+        return base.with_suffix(".sql")
+
+    else:
+        raise FileNotFoundError(f"Could not find script for {uri}")
 
 
 def add_placeholder_script(uri: StepURI) -> Path:
