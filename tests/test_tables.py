@@ -170,6 +170,40 @@ df.write_parquet(output_file)
         assert metadata[key] == value
 
 
+def test_generate_with_sql_step(setup_test_environment):
+    # Create dummy dependencies
+    data = {"dim_col1": [1, 3], "col2": [2, 4]}
+    expected_df = pl.DataFrame(data)
+
+    # Create dummy SQL script
+    uri = StepURI.parse("table://dataset/latest")
+    script_path = TABLE_SCRIPT_DIR / "dataset/latest.sql"
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+    script_path.write_text(
+        """CREATE TABLE {output_file} AS
+SELECT
+    1 AS dim_col1,
+    2 AS col2
+UNION ALL
+SELECT
+    3 AS dim_col1,
+    4 AS col2;
+"""
+    )
+    script_path.chmod(0o755)
+
+    # Create TableStep instance
+    uri = StepURI.parse("table://dataset/latest")
+
+    build_table(uri, [])
+
+    # Check data frame content
+    dest_file = TABLE_DIR / "dataset/latest.parquet"
+    assert dest_file.exists()
+    result_df = pl.read_parquet(dest_file)
+    assert result_df.equals(expected_df)
+
+
 def add_mock_snapshot(metadata: Optional[dict[str, Any]] = None) -> StepURI:
     # choose the uri
     uri = StepURI("snapshot", random_path())
