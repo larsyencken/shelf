@@ -180,7 +180,7 @@ def test_generate_with_sql_step(setup_test_environment):
     script_path = TABLE_SCRIPT_DIR / "dataset/latest.sql"
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(
-        """CREATE TABLE {output_file} AS
+        """CREATE TEMPORARY TABLE data AS
 SELECT
     1 AS dim_col1,
     2 AS col2
@@ -190,7 +190,6 @@ SELECT
     4 AS col2;
 """
     )
-    script_path.chmod(0o755)
 
     # Create TableStep instance
     uri = StepURI.parse("table://dataset/latest")
