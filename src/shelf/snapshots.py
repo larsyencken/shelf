@@ -158,6 +158,14 @@ class Snapshot:
 
         elif self.snapshot_type == "directory":
             assert self.manifest is not None
+
+            # if the diretory exists, remove any files that are not in the manifest
+            if self.path.exists():
+                for file_name in self.path.iterdir():
+                    if file_name.name not in self.manifest:
+                        print_op("DELETE", file_name)
+                        file_name.unlink()
+
             for file_name, checksum in self.manifest.items():
                 fetch_from_s3(checksum, self.path / file_name)
             return
