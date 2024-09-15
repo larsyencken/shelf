@@ -59,28 +59,37 @@ The metadata format has some minimum fields, but is meant for you to extend as n
 
 ### Creating a new table
 
-To create a new table, use the `shelf new-table <table-path> [dep1 [dep2 [...]]` command. This command will create a placeholder executable script that generates an example data file of the given type based on the file extension (.csv, .jsonl, .feather).
+To create a new table, use the `shelf new-table <table-path> [dep1 [dep2 [...]]` command. This command will create a placeholder executable script that generates an example data file of the given type based on the file extension (.parquet).
 
-For example, to create a new table with a CSV placeholder script:
-
-```
-shelf new-table path/to/your/table.csv
-```
-
-This will create a placeholder script that generates an example CSV file with the following content:
+For example, to create a new table with a Parquet placeholder script:
 
 ```
-#!/usr/bin/env tail +2
-a,b,c
-1,2,3
-1,3,4
-3,5,6
+shelf new-table path/to/your/table
+```
+
+This will create a placeholder script that generates an example Parquet file with the following content:
+
+```
+#!/usr/bin/env python3
+import sys
+import polars as pl
+
+data = {
+    "a": [1, 1, 3],
+    "b": [2, 3, 5],
+    "c": [3, 4, 6]
+}
+
+df = pl.DataFrame(data)
+
+output_file = sys.argv[-1]
+df.write_parquet(output_file)
 ```
 
 The command also supports the `--edit` option to open the metadata file for the table in your editor:
 
 ```
-shelf new-table path/to/your/table.csv --edit
+shelf new-table path/to/your/table --edit
 ```
 
 ### Building your shelf

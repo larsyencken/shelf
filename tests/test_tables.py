@@ -3,6 +3,7 @@ import random
 import shutil
 from typing import Any, Optional
 
+import polars as pl
 import pytest
 from shelf.paths import SNAPSHOT_DIR, TABLE_DIR, TABLE_SCRIPT_DIR
 from shelf.tables import _metadata_path, build_table
@@ -35,47 +36,67 @@ def setup_test_environment(tmp_path):
 
 def test_generate_without_deps(setup_test_environment):
     # Create dummy dependencies
-    expected_content = "dim_col1,col2\n1,2\n3,4\n"
+    data = {"dim_col1": [1, 3], "col2": [2, 4]}
+    expected_df = pl.DataFrame(data)
 
     # Create dummy script
-    uri = StepURI.parse("table://dataset/latest.csv")
-    script_path = TABLE_SCRIPT_DIR / "dataset/latest"
+    uri = StepURI.parse("table://dataset/latest")
+    script_path = TABLE_SCRIPT_DIR / "dataset/latest.py"
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    script_path.write_text("""#!/bin/bash
-        dest="${!#}"
-        mkdir -p $(dirname $dest)
-        echo "dim_col1,col2" > $dest
-        echo "1,2" >> $dest
-        echo "3,4" >> $dest
-    """)
+    script_path.write_text(
+        """#!/usr/bin/env python3
+import sys
+import polars as pl
+
+data = {
+    "dim_col1": [1, 3],
+    "col2": [2, 4]
+}
+
+df = pl.DataFrame(data)
+
+output_file = sys.argv[-1]
+df.write_parquet(output_file)
+"""
+    )
     script_path.chmod(0o755)
 
     # Create TableStep instance
-    uri = StepURI.parse("table://dataset/latest.csv")
+    uri = StepURI.parse("table://dataset/latest")
 
     build_table(uri, [])
 
     # Check data frame content
-    dest_file = TABLE_DIR / "dataset/latest.csv"
+    dest_file = TABLE_DIR / "dataset/latest.parquet"
     assert dest_file.exists()
-    assert dest_file.read_text() == expected_content
+    result_df = pl.read_parquet(dest_file)
+    assert result_df.equals(expected_df)
 
 
 def test_generate_without_dimension_col(setup_test_environment):
     # Create dummy script
-    uri = StepURI.parse("table://dataset/latest.csv")
+    uri = StepURI.parse("table://dataset/latest")
     script_path = TABLE_SCRIPT_DIR / "dataset/latest"
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    script_path.write_text("""#!/bin/bash
-        dest="${!#}"
-        mkdir -p $(dirname $dest)
-        echo "col1,col2" > $dest
-        echo "1,2" >> $dest
-        echo "3,4" >> $dest
-    """)
+    script_path.write_text(
+        """#!/usr/bin/env python3
+import sys
+import polars as pl
+
+data = {
+    "col1": [1, 3],
+    "col2": [2, 4]
+}
+
+df = pl.DataFrame(data)
+
+output_file = sys.argv[-1]
+df.write_parquet(output_file)
+"""
+    )
     script_path.chmod(0o755)
 
-    uri = StepURI.parse("table://dataset/latest.csv")
+    uri = StepURI.parse("table://dataset/latest")
 
     with pytest.raises(Exception):
         build_table(uri, [])
@@ -87,16 +108,25 @@ def test_generate_with_deps(setup_test_environment):
     deps = [dep1, dep2]
 
     # Create dummy script
-    uri = StepURI.parse("table://dataset/latest.csv")
-    script_path = TABLE_SCRIPT_DIR / "dataset/latest"
+    uri = StepURI.parse("table://dataset/latest")
+    script_path = TABLE_SCRIPT_DIR / "dataset/latest.py"
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    script_path.write_text("""#!/bin/bash
-        dest="${!#}"
-        mkdir -p $(dirname $dest)
-        echo "dim_col1,col2" > $dest
-        echo "1,2" >> $dest
-        echo "3,4" >> $dest
-    """)
+    script_path.write_text(
+        """#!/usr/bin/env python3
+import sys
+import polars as pl
+
+data = {
+    "dim_col1": [1, 3],
+    "col2": [2, 4]
+}
+
+df = pl.DataFrame(data)
+
+output_file = sys.argv[-1]
+df.write_parquet(output_file)
+"""
+    )
     script_path.chmod(0o755)
 
     build_table(uri, deps)
@@ -112,16 +142,25 @@ def test_generate_with_single_dep(setup_test_environment):
     deps = [dep]
 
     # Create dummy script
-    uri = StepURI.parse("table://dataset/latest.csv")
-    script_path = TABLE_SCRIPT_DIR / "dataset/latest"
+    uri = StepURI.parse("table://dataset/latest")
+    script_path = TABLE_SCRIPT_DIR / "dataset/latest.py"
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    script_path.write_text("""#!/bin/bash
-        dest="${!#}"
-        mkdir -p $(dirname $dest)
-        echo "dim_col1,col2" > $dest
-        echo "1,2" >> $dest
-        echo "3,4" >> $dest
-    """)
+    script_path.write_text(
+        """#!/usr/bin/env python3
+import sys
+import polars as pl
+
+data = {
+    "dim_col1": [1, 3],
+    "col2": [2, 4]
+}
+
+df = pl.DataFrame(data)
+
+output_file = sys.argv[-1]
+df.write_parquet(output_file)
+"""
+    )
     script_path.chmod(0o755)
 
     build_table(uri, deps)

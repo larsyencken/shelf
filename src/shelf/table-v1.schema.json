@@ -9,7 +9,7 @@
     },
     "uri": {
       "type": "string",
-      "pattern": "^table://[a-z0-9-_/]+.(csv|tsv|jsonl|feather|parquet)$"
+      "pattern": "^table://[a-z0-9-_/]+$"
     },
     "checksum": {
       "type": "string",

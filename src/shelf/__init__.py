@@ -237,17 +237,11 @@ def export_duckdb(shelf: Shelf, db_file: str) -> None:
     for step in shelf.steps:
         if step.scheme == "table":
             table_name = step.path.replace("/", "_").replace("-", "").rsplit(".", 1)[0]
-            table_path = Path("data/tables") / step.path
+            table_path = (Path("data/tables") / step.path).with_suffix(".parquet")
 
-            if table_path.suffix == ".jsonl":
-                conn.execute(
-                    f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{table_path}')"
-                )
-
-            elif table_path.suffix == ".csv":
-                conn.execute(
-                    f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_csv_auto('{table_path}')"
-                )
+            conn.execute(
+                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{table_path}')"
+            )
 
     conn.close()
 
