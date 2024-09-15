@@ -13,8 +13,7 @@ from shelf import (
     plan_and_run,
     snapshot_to_shelf,
 )
-from shelf.paths import BASE_DIR
-from shelf.tables import _get_executable
+from shelf.paths import BASE_DIR, TABLE_SCRIPT_DIR
 from shelf.types import StepURI
 from shelf.utils import checksum_folder, load_yaml
 
@@ -369,12 +368,20 @@ def test_export_duckdb(setup_test_environment):
     shelf = Shelf.init()
     shelf.new_table(uri1.path, [])
     shelf.new_table(uri2.path, [])
-    _get_executable(uri1).write_text(
+    exec1 = (TABLE_SCRIPT_DIR / uri1.path).with_suffix(".py")
+    exec1.parent.mkdir(parents=True, exist_ok=True)
+    exec1.write_text(
         '#!/usr/bin/env python3\nimport sys\nimport polars as pl\n\noutput_file = sys.argv[-1]\npl.DataFrame({"dim_key": ["value1", "value2"]}).write_parquet(output_file)'
     )
-    _get_executable(uri2).write_text(
+    exec1.chmod(0o755)
+    exec2 = (TABLE_SCRIPT_DIR / uri2.path).with_suffix(".py")
+    exec2.parent.mkdir(parents=True, exist_ok=True)
+    exec2.write_text(
         '#!/usr/bin/env python3\nimport sys\nimport polars as pl\n\noutput_file = sys.argv[-1]\npl.DataFrame({"dim_key": ["value3"], "value": ["value4"]}).write_parquet(output_file)'
     )
+    exec2.chmod(0o755)
+    print(exec1)
+    print(exec2)
 
     # refresh the shelf
     shelf.refresh()
