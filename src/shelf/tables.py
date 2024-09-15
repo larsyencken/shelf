@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 from pathlib import Path
 
@@ -53,7 +54,7 @@ def _exec_command(uri: StepURI, command: list[Path]) -> None:
         dest_path.unlink()
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    command_s = [str(p.resolve()) for p in command]
+    command_s = [sys.executable] + [str(p.resolve()) for p in command]
 
     subprocess.run(command_s, check=True)
 
@@ -148,7 +149,7 @@ def _infer_schema(uri: StepURI) -> dict[str, str]:
 
 
 def _get_executable(uri: StepURI, check: bool = True) -> Path:
-    executable = (TABLE_SCRIPT_DIR / uri.path).with_suffix("")
+    executable = (TABLE_SCRIPT_DIR / uri.path).with_suffix(".py")
     if check and not _is_valid_script(executable):
         if _is_valid_script(executable.parent):
             executable = executable.parent

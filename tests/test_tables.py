@@ -41,7 +41,7 @@ def test_generate_without_deps(setup_test_environment):
 
     # Create dummy script
     uri = StepURI.parse("table://dataset/latest")
-    script_path = TABLE_SCRIPT_DIR / "dataset/latest"
+    script_path = TABLE_SCRIPT_DIR / "dataset/latest.py"
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(
         """#!/usr/bin/env python3
@@ -109,7 +109,7 @@ def test_generate_with_deps(setup_test_environment):
 
     # Create dummy script
     uri = StepURI.parse("table://dataset/latest")
-    script_path = TABLE_SCRIPT_DIR / "dataset/latest"
+    script_path = TABLE_SCRIPT_DIR / "dataset/latest.py"
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(
         """#!/usr/bin/env python3
@@ -143,7 +143,7 @@ def test_generate_with_single_dep(setup_test_environment):
 
     # Create dummy script
     uri = StepURI.parse("table://dataset/latest")
-    script_path = TABLE_SCRIPT_DIR / "dataset/latest"
+    script_path = TABLE_SCRIPT_DIR / "dataset/latest.py"
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(
         """#!/usr/bin/env python3
