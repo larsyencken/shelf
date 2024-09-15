@@ -362,18 +362,18 @@ def test_export_duckdb(setup_test_environment):
     tmp_path = setup_test_environment
 
     # configure test
-    uri1 = StepURI.parse("table://test_namespace/test_table1/2024-07-26.jsonl")
-    uri2 = StepURI.parse("table://test_namespace/test_table2/2024-07-27.csv")
+    uri1 = StepURI.parse("table://test_namespace/test_table1/2024-07-26")
+    uri2 = StepURI.parse("table://test_namespace/test_table2/2024-07-27")
 
     # add table scripts to shelf
     shelf = Shelf.init()
     shelf.new_table(uri1.path, [])
     shelf.new_table(uri2.path, [])
     _get_executable(uri1).write_text(
-        '#!/bin/bash\ncat << EOF > ${!#}\n{"dim_key": "value1"}\n{"dim_key": "value2"}'
+        '#!/usr/bin/env python3\nimport sys\nimport polars as pl\n\noutput_file = sys.argv[-1]\npl.DataFrame({"dim_key": ["value1", "value2"]}).write_parquet(output_file)'
     )
     _get_executable(uri2).write_text(
-        "#!/bin/bash\ncat << EOF > ${!#}\ndim_key,value\nvalue3,value4\n"
+        '#!/usr/bin/env python3\nimport sys\nimport polars as pl\n\noutput_file = sys.argv[-1]\npl.DataFrame({"dim_key": ["value3"], "value": ["value4"]}).write_parquet(output_file)'
     )
 
     # refresh the shelf

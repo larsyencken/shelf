@@ -3,8 +3,8 @@ import random
 import shutil
 from typing import Any, Optional
 
-import pytest
 import polars as pl
+import pytest
 from shelf.paths import SNAPSHOT_DIR, TABLE_DIR, TABLE_SCRIPT_DIR
 from shelf.tables import _metadata_path, build_table
 from shelf.types import StepURI
@@ -36,17 +36,15 @@ def setup_test_environment(tmp_path):
 
 def test_generate_without_deps(setup_test_environment):
     # Create dummy dependencies
-    data = {
-        "dim_col1": [1, 3],
-        "col2": [2, 4]
-    }
+    data = {"dim_col1": [1, 3], "col2": [2, 4]}
     expected_df = pl.DataFrame(data)
 
     # Create dummy script
     uri = StepURI.parse("table://dataset/latest")
     script_path = TABLE_SCRIPT_DIR / "dataset/latest"
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    script_path.write_text("""#!/usr/bin/env python3
+    script_path.write_text(
+        """#!/usr/bin/env python3
 import sys
 import polars as pl
 
@@ -59,7 +57,8 @@ df = pl.DataFrame(data)
 
 output_file = sys.argv[-1]
 df.write_parquet(output_file)
-""")
+"""
+    )
     script_path.chmod(0o755)
 
     # Create TableStep instance
@@ -71,7 +70,7 @@ df.write_parquet(output_file)
     dest_file = TABLE_DIR / "dataset/latest.parquet"
     assert dest_file.exists()
     result_df = pl.read_parquet(dest_file)
-    assert result_df.frame_equal(expected_df)
+    assert result_df.equals(expected_df)
 
 
 def test_generate_without_dimension_col(setup_test_environment):
@@ -79,7 +78,8 @@ def test_generate_without_dimension_col(setup_test_environment):
     uri = StepURI.parse("table://dataset/latest")
     script_path = TABLE_SCRIPT_DIR / "dataset/latest"
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    script_path.write_text("""#!/usr/bin/env python3
+    script_path.write_text(
+        """#!/usr/bin/env python3
 import sys
 import polars as pl
 
@@ -92,7 +92,8 @@ df = pl.DataFrame(data)
 
 output_file = sys.argv[-1]
 df.write_parquet(output_file)
-""")
+"""
+    )
     script_path.chmod(0o755)
 
     uri = StepURI.parse("table://dataset/latest")
@@ -110,7 +111,8 @@ def test_generate_with_deps(setup_test_environment):
     uri = StepURI.parse("table://dataset/latest")
     script_path = TABLE_SCRIPT_DIR / "dataset/latest"
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    script_path.write_text("""#!/usr/bin/env python3
+    script_path.write_text(
+        """#!/usr/bin/env python3
 import sys
 import polars as pl
 
@@ -123,7 +125,8 @@ df = pl.DataFrame(data)
 
 output_file = sys.argv[-1]
 df.write_parquet(output_file)
-""")
+"""
+    )
     script_path.chmod(0o755)
 
     build_table(uri, deps)
@@ -142,7 +145,8 @@ def test_generate_with_single_dep(setup_test_environment):
     uri = StepURI.parse("table://dataset/latest")
     script_path = TABLE_SCRIPT_DIR / "dataset/latest"
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    script_path.write_text("""#!/usr/bin/env python3
+    script_path.write_text(
+        """#!/usr/bin/env python3
 import sys
 import polars as pl
 
@@ -155,7 +159,8 @@ df = pl.DataFrame(data)
 
 output_file = sys.argv[-1]
 df.write_parquet(output_file)
-""")
+"""
+    )
     script_path.chmod(0o755)
 
     build_table(uri, deps)
