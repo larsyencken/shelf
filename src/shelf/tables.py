@@ -26,7 +26,7 @@ def _generate_build_command(uri: StepURI, dependencies: list[StepURI]) -> list[P
     for dep in dependencies:
         cmd.append(_dependency_path(dep))
 
-    dest_path = TABLE_DIR / uri.path
+    dest_path = TABLE_DIR / f"{uri.path}.parquet"
     cmd.append(dest_path)
 
     return cmd
@@ -37,7 +37,7 @@ def _dependency_path(uri: StepURI) -> Path:
         return Snapshot.load(uri.path).path
 
     elif uri.scheme == "table":
-        return TABLE_DIR / uri.path
+        return TABLE_DIR / f"{uri.path}.parquet"
     else:
         raise ValueError(f"Unknown scheme {uri.scheme}")
 
@@ -66,7 +66,7 @@ def _metadata_path(uri: StepURI) -> Path:
         return (SNAPSHOT_DIR / uri.path).with_suffix(".meta.yaml")
 
     elif uri.scheme == "table":
-        return (TABLE_DIR / uri.path).with_suffix(".meta.yaml")
+        return (TABLE_DIR / f"{uri.path}.parquet").with_suffix(".meta.yaml")
 
     else:
         raise ValueError(f"Unknown scheme {uri.scheme}")
@@ -77,7 +77,7 @@ def _gen_metadata(uri: StepURI, dependencies: list[StepURI]) -> None:
     metadata = {
         "uri": str(uri),
         "version": 1,
-        "checksum": checksum_file(TABLE_DIR / uri.path),
+        "checksum": checksum_file(TABLE_DIR / f"{uri.path}.parquet"),
         "input_manifest": _generate_input_manifest(uri, dependencies),
     }
 
@@ -128,7 +128,7 @@ def is_completed(uri: StepURI) -> bool:
     assert uri.scheme == "table"
 
     # the easy case; is it missing?
-    if not (TABLE_DIR / uri.path).exists() or not _metadata_path(uri).exists():
+    if not (TABLE_DIR / f"{uri.path}.parquet").exists() or not _metadata_path(uri).exists():
         return False
 
     # it's there, but is it up to date? check the manifest
@@ -142,24 +142,8 @@ def is_completed(uri: StepURI) -> bool:
 
 
 def _infer_schema(uri: StepURI) -> dict[str, str]:
-    data_path = TABLE_DIR / uri.path
-    suffix = data_path.suffix
-
-    if suffix in [".csv", ".tsv"]:
-        df = pl.read_csv(data_path, separator="\t" if suffix == ".tsv" else ",")
-
-    elif suffix == ".jsonl":
-        df = pl.read_ndjson(data_path)
-
-    elif suffix == ".feather":
-        df = pl.read_ipc(data_path)
-
-    elif suffix == ".parquet":
-        df = pl.read_parquet(data_path)
-
-    else:
-        raise ValueError("Unsupported file type")
-
+    data_path = TABLE_DIR / f"{uri.path}.parquet"
+    df = pl.read_parquet(data_path)
     return {col: str(dtype) for col, dtype in df.schema.items()}
 
 
@@ -182,36 +166,9 @@ def add_placeholder_script(uri: StepURI) -> Path:
         raise ValueError(f"Script already exists: {script_path}")
 
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    suffix = Path(uri.path).suffix
-
-    if suffix == ".csv":
-        content = """#!/bin/bash
-output_file="${!#}"
-cat << EOF > "$output_file"
-a,b,c
-1,2,3
-1,3,4
-3,5,6
-"""
-
-    elif suffix == ".jsonl":
-        content = """#!/bin/bash
-output_file="${!#}"
-cat << EOF > "$output_file"
-{"a": 1, "b": 2, "c": 3}
-{"a": 1, "b": 3, "c": 4}
-{"a": 3, "b": 5, "c": 6}
-"""
-
-    elif suffix == ".feather":
-        content = """#!/usr/bin/env python3
-import sys
-
-import polars as pl
+    content = """#!/usr/bin/env python3
 import sys
 import polars as pl
-import sys
-import json
 
 data = {
     "a": [1, 1, 3],
@@ -222,10 +179,8 @@ data = {
 df = pl.DataFrame(data)
 
 output_file = sys.argv[-1]
-df.write_ipc(output_file)
+df.write_parquet(output_file)
 """
-    else:
-        raise ValueError(f"Unsupported table format: {script_path.suffix}")
 
     script_path.write_text(content)
     script_path.chmod(0o755)
