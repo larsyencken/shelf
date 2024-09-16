@@ -81,7 +81,7 @@ def _exec_sql_command(uri: StepURI, command: list[Path]) -> None:
         sql = f.read().format(**template_vars)
 
     con = duckdb.connect(database=":memory:")
-    print(sql)
+    sql = f"CREATE TEMPORARY TABLE data AS ({sql})"
     con.execute(sql)
     con.execute(f"COPY data TO '{output_file}' (FORMAT 'parquet')")
 
@@ -168,10 +168,11 @@ def _gen_metadata(uri: StepURI, dependencies: list[StepURI]) -> None:
 
     jsonschema.validate(metadata, TABLE_SCHEMA)
 
-    if not any(col.startswith("dim_") for col in metadata["schema"]):
+    columns = list(metadata["schema"].keys())
+    if not any(col.startswith("dim_") for col in columns):
         # we have not yet written this metadata, so the step is not yet complete
         raise ValueError(
-            f"Table {uri} does not have any dimension columns prefixed with dim_"
+            f"Table {uri} does not have any dimension columns prefixed with dim_, found: {columns}"
         )
 
     save_yaml(metadata, dest_path)
@@ -222,14 +223,18 @@ def _infer_schema(uri: StepURI) -> dict[str, str]:
 def _get_executable(uri: StepURI, check: bool = True) -> Path:
     base = TABLE_SCRIPT_DIR / uri.path
 
-    if base.with_suffix(".py").exists():
-        if check and not _is_valid_script(base.with_suffix(".py")):
-            raise Exception(f'Missing execute permissions on {base.with_suffix(".py")}')
+    for exec_base in [base, base.parent]:
+        py_script = exec_base.with_suffix(".py")
+        sql_script = exec_base.with_suffix(".sql")
 
-        return base.with_suffix(".py")
+        if py_script.exists():
+            if check and not _is_valid_script(py_script):
+                raise Exception(f"Missing execute permissions on {py_script}")
 
-    elif base.with_suffix(".sql").exists():
-        return base.with_suffix(".sql")
+            return py_script
+
+        elif sql_script.exists():
+            return sql_script
 
     else:
         raise FileNotFoundError(f"Could not find script for {uri}")

@@ -13,7 +13,6 @@ from shelf import steps
 from shelf.core import Shelf
 from shelf.exceptions import StepDefinitionError
 from shelf.snapshots import Snapshot
-from shelf.tables import add_placeholder_script
 from shelf.types import StepURI
 from shelf.utils import add_to_gitignore, checksum_manifest, console
 
@@ -290,8 +289,6 @@ def new_table(
     table_uri = StepURI("table", table_path)
     if table_uri in shelf.steps:
         raise ValueError(f"Table already exists in shelf: {table_uri}")
-
-    add_placeholder_script(table_uri)
 
     shelf.steps[table_uri] = [StepURI.parse(dep) for dep in dependencies]
     shelf.save()

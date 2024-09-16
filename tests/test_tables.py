@@ -180,14 +180,14 @@ def test_generate_with_sql_step(setup_test_environment):
     script_path = TABLE_SCRIPT_DIR / "dataset/latest.sql"
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(
-        """CREATE TEMPORARY TABLE data AS
+        """
 SELECT
     1 AS dim_col1,
     2 AS col2
 UNION ALL
 SELECT
     3 AS dim_col1,
-    4 AS col2;
+    4 AS col2
 """
     )
 
