@@ -175,6 +175,8 @@ def _gen_metadata(uri: StepURI, dependencies: list[StepURI]) -> None:
             f"Table {uri} does not have any dimension columns prefixed with dim_, found: {columns}"
         )
 
+    _check_unique_dim_columns(uri, columns)
+
     save_yaml(metadata, dest_path)
 
 
@@ -266,3 +268,19 @@ df.write_parquet(output_file)
     script_path.chmod(0o755)
 
     return script_path
+
+
+def _check_unique_dim_columns(uri: StepURI, columns: list[str]) -> None:
+    data_path = TABLE_DIR / f"{uri.path}.parquet"
+    df = pl.read_parquet(data_path)
+    dim_columns = [col for col in columns if col.startswith("dim_")]
+
+    if not dim_columns:
+        raise ValueError(f"Table {uri} does not have any dimension columns.")
+
+    duplicated_rows = df[dim_columns].filter(df[dim_columns].duplicated())
+    if not duplicated_rows.is_empty():
+        failing_rows = duplicated_rows.head(2).to_dicts()
+        raise ValueError(
+            f"Table {uri} has non-unique dimension columns: {dim_columns}. Failing rows: {failing_rows}"
+        )
