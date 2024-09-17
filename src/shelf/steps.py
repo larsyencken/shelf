@@ -58,7 +58,6 @@ def is_completed(step: StepURI) -> bool:
         return snapshots.is_completed(step)
 
     elif step.scheme == "table":
-        # FIXME, this should not be here, and honestly it's a shite implementation
         return tables.is_completed(step)
 
     raise ValueError(f"Unknown scheme {step.scheme}")

@@ -541,3 +541,28 @@ def test_cache_miss(setup_test_environment):
     plan_and_run(shelf, str(uri))
     assert data_file.exists()
     assert data_file.read_text() == "Hello, World!"
+
+
+def test_resolve_latest_dependency(setup_test_environment):
+    tmp_path = setup_test_environment
+
+    # configure test
+    uri1 = StepURI.parse("snapshot://test_namespace/test_dataset1/latest")
+    uri2 = StepURI.parse("snapshot://test_namespace/test_dataset2/2024-07-27")
+    new_file1 = tmp_path / "file1.txt"
+    new_file2 = tmp_path / "file2.txt"
+    new_file1.write_text("Hello, World!")
+    new_file2.write_text("Hello, Cosmos!")
+
+    # add files to shelf
+    shelf = Shelf.init()
+    snapshot_to_shelf(new_file1, uri1.path)
+    snapshot_to_shelf(new_file2, uri2.path)
+    shelf.refresh()
+
+    # latest resolves to latest
+    assert shelf.get_latest_version(uri1) == uri1
+
+    # latest resolves to a date
+    uri2_latest = StepURI.parse("snapshot://test_namespace/test_dataset2/latest")
+    assert shelf.get_latest_version(uri2_latest) == uri2

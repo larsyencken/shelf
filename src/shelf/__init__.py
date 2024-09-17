@@ -213,6 +213,10 @@ def plan_and_run(
     #     been selected to be run, even down to the level of which checksums are out of
     #     date or which files are missing
     dag = shelf.steps
+
+    for step, dependencies in dag.items():
+        dag[step] = resolve_latest(dependencies, shelf)
+
     if regex:
         dag = steps.prune_with_regex(dag, regex)
 
@@ -224,6 +228,18 @@ def plan_and_run(
         return
 
     steps.execute_dag(dag, dry_run=dry_run)
+
+
+def resolve_latest(dependencies: list[StepURI], shelf: Shelf) -> list[StepURI]:
+    resolved = []
+    for dep in dependencies:
+        if dep.path.endswith("latest"):
+            latest_version = shelf.get_latest_version(dep)
+            resolved.append(latest_version)
+        else:
+            resolved.append(dep)
+
+    return resolved
 
 
 def export_duckdb(shelf: Shelf, db_file: str) -> None:
