@@ -67,3 +67,13 @@ class Shelf:
 
         self.steps[table_uri] = [StepURI.parse(dep) for dep in dependencies]
         self.save()
+
+    def get_latest_version(self, step: StepURI) -> StepURI:
+        assert step.path.endswith("/latest")
+        prefix = step.path.rsplit("/", 1)[0]
+        versions = [
+            s
+            for s in self.steps
+            if s.scheme == step.scheme and s.path.startswith(prefix)
+        ]
+        return max(versions)

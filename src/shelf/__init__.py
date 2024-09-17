@@ -223,7 +223,22 @@ def plan_and_run(
         print("Already up to date!")
         return
 
+    for step, dependencies in dag.items():
+        dag[step] = resolve_latest(dependencies, shelf)
+
     steps.execute_dag(dag, dry_run=dry_run)
+
+
+def resolve_latest(dependencies: list[StepURI], shelf) -> list[StepURI]:
+    resolved = []
+    for dep in dependencies:
+        if dep.path.endswith("latest"):
+            latest_version = shelf.get_latest_version(dep)
+            resolved.append(latest_version)
+        else:
+            resolved.append(dep)
+
+    return resolved
 
 
 def export_duckdb(shelf: Shelf, db_file: str) -> None:
