@@ -44,6 +44,8 @@ class Snapshot:
     source_url: Optional[str] = None
     date_accessed: Optional[str] = None
     access_notes: Optional[str] = None
+    license: Optional[str] = None
+    license_url: Optional[str] = None
 
     @property
     def path(self):
