@@ -2,6 +2,7 @@ import argparse
 import os
 import re
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -115,6 +116,8 @@ def main():
         help="Edit the metadata file in an interactive editor.",
     )
 
+    subparsers.add_parser("db", help="Enter a DuckDB shell")
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -137,6 +140,9 @@ def main():
 
     elif args.command == "export-duckdb":
         return export_duckdb(shelf, args.db_file)
+
+    elif args.command == "db":
+        return duckdb_shell(shelf)
 
     elif args.command == "new-table":
         return new_table(shelf, args.table_path, args.dependencies, args.edit)
@@ -308,6 +314,24 @@ def new_table(
 
     shelf.steps[table_uri] = [StepURI.parse(dep) for dep in dependencies]
     shelf.save()
+
+
+def duckdb_shell(shelf: Shelf) -> None:
+    parts = []
+    for step in shelf.steps:
+        if step.scheme == "table":
+            table_name = step.path.replace("/", "_").replace("-", "").rsplit(".", 1)[0]
+            table_path = (Path("data/tables") / step.path).with_suffix(".parquet")
+
+            parts.append(
+                f"CREATE OR REPLACE VIEW {table_name} AS\nSELECT * FROM read_parquet('{table_path}');"
+            )
+
+    sql = "\n\n".join(parts)
+    with tempfile.NamedTemporaryFile("w", suffix=".sql") as f:
+        f.write(sql)
+        f.flush()
+        subprocess.run(f'duckdb -cmd ".read {f.name}"', shell=True)
 
 
 def _maybe_add_version(dataset_name: str) -> str:
