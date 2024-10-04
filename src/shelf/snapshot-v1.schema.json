@@ -34,7 +34,7 @@
     },
     "source_url": {
       "type": "string",
-      "pattern": "^https?://[A-Za-z0-9-_./?&]+$"
+      "pattern": "^https?://[A-Za-z0-9-._~:/?#[\\]@!$&'()*+,;=%]+$"
     },
     "date_accessed": {
       "type": "string",
@@ -57,7 +57,7 @@
     },
     "license_url": {
       "type": "string",
-      "pattern": "^https?://[A-Za-z0-9-_./?&]+$"
+      "pattern": "^https?://[A-Za-z0-9-._~:/?#[\\]@!$&'()*+,;=%]+$"
     }
   },
   "required": ["version", "uri", "checksum"],
