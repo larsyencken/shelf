@@ -27,7 +27,7 @@
     },
     "source_url": {
       "type": "string",
-      "pattern": "^https?://[A-Za-z0-9-_./?&]+$"
+      "pattern": "^https?://[A-Za-z0-9-._~:/?#[\\]@!$&'()*+,;=%]+$"
     },
     "date_accessed": {
       "type": "string",
@@ -35,6 +35,13 @@
     },
     "access_notes": {
       "type": "string"
+    },
+    "license": {
+      "type": "string"
+    },
+    "license_url": {
+      "type": "string",
+      "pattern": "^https?://[A-Za-z0-9-._~:/?#[\\]@!$&'()*+,;=%]+$"
     },
     "input_manifest": {
       "type": "object",
