@@ -132,3 +132,4 @@ Please report any issues at: https://github.com/larsyencken/shelf/issues
   - Only fetch things that are out of date
   - `shelf list` to see what datasets are available
   - `shelf audit` to ensure your shelf is coherent and correct
+  - `shelf db` to enter an interactive DuckDB shell with all your data
