@@ -162,7 +162,7 @@ def init_shelf() -> None:
 
 
 def snapshot_to_shelf(
-    file_path: Path, dataset_name: str, edit: bool = False
+    file_path: Path, dataset_name: str, edit: bool = False, force: bool = False
 ) -> Snapshot:
     _check_s3_credentials()
 
@@ -172,7 +172,7 @@ def snapshot_to_shelf(
     # sanity check that it does not exist
     shelf = Shelf()
     proposed_uri = StepURI("snapshot", dataset_name)
-    if proposed_uri in shelf.steps:
+    if proposed_uri in shelf.steps and not force:
         raise ValueError(f"Dataset already exists in shelf: {proposed_uri}")
 
     # create and add to s3
