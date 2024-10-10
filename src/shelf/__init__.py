@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import tempfile
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -116,7 +117,12 @@ def main():
         help="Edit the metadata file in an interactive editor.",
     )
 
-    subparsers.add_parser("db", help="Enter a DuckDB shell")
+    db_parser = subparsers.add_parser("db", help="Enter a DuckDB shell")
+    db_parser.add_argument(
+        "--no-short",
+        action="store_false",
+        help="Disable shorter aliases for table names",
+    )
 
     args = parser.parse_args()
 
@@ -142,7 +148,7 @@ def main():
         return export_duckdb(shelf, args.db_file)
 
     elif args.command == "db":
-        return duckdb_shell(shelf)
+        return duckdb_shell(shelf, short=args.no_short)
 
     elif args.command == "new-table":
         return new_table(shelf, args.table_path, args.dependencies, args.edit)
@@ -316,22 +322,83 @@ def new_table(
     shelf.save()
 
 
-def duckdb_shell(shelf: Shelf) -> None:
-    parts = []
-    for step in shelf.steps:
-        if step.scheme == "table":
-            table_name = step.path.replace("/", "_").replace("-", "").rsplit(".", 1)[0]
-            table_path = (Path("data/tables") / step.path).with_suffix(".parquet")
+def duckdb_shell(shelf: Shelf, short: bool = True) -> None:
+    tables = _get_tables(shelf)
 
-            parts.append(
-                f"CREATE OR REPLACE VIEW {table_name} AS\nSELECT * FROM read_parquet('{table_path}');"
+    sql_parts = []
+    for path in tables:
+        table_name = _path_to_snake(path)
+        table_path = (Path("data/tables") / path).with_suffix(".parquet")
+
+        sql_parts.append(
+            f"CREATE OR REPLACE VIEW {table_name} AS\nSELECT * FROM read_parquet('{table_path}');"
+        )
+
+    if short:
+        for alias, table_name in _table_aliases(tables):
+            sql_parts.append(
+                f"CREATE OR REPLACE VIEW {alias} AS\nSELECT * FROM {table_name};"
             )
 
-    sql = "\n\n".join(parts)
+    sql = "\n\n".join(sql_parts)
     with tempfile.NamedTemporaryFile("w", suffix=".sql") as f:
         f.write(sql)
         f.flush()
         subprocess.run(f'duckdb -cmd ".read {f.name}"', shell=True)
+
+
+def _path_to_snake(path: str) -> str:
+    return path.replace("/", "_").replace("-", "").rsplit(".", 1)[0]
+
+
+def _get_tables(shelf: Shelf) -> list[str]:
+    tables = []
+    for step in shelf.steps:
+        if step.scheme == "table":
+            tables.append(step.path)
+
+    return tables
+
+
+def _table_aliases(tables: list[str]) -> list[tuple[str, str]]:
+    # map potential aliases to table names
+    potential_aliases = defaultdict(set)
+    for path in tables:
+        parts = path.split("/")
+
+        # Generate all possible suffixes without version and with version
+        for i in range(len(parts) - 1):
+            # Suffix without version
+            no_version = "/".join(parts[i:-1])
+            if no_version:
+                potential_aliases[no_version].add(path)
+
+            # Suffix with version
+            with_version = "/".join(parts[i:])
+            if with_version != path:
+                potential_aliases[with_version].add(path)
+
+    # only keep unique ones
+    min_alias = {}
+    for alias, paths in potential_aliases.items():
+        if len(paths) == 1:
+            (path,) = paths
+            table_alias = _path_to_snake(alias)
+            table_name = _path_to_snake(path)
+
+            min_alias[table_name] = _shorter(table_alias, min_alias.get(table_name))
+
+    return [(table_alias, table_name) for table_name, table_alias in min_alias.items()]
+
+
+def _shorter(a: str, b: Optional[str]) -> str:
+    if not b:
+        return a
+
+    if len(a) < len(b):
+        return a
+
+    return b
 
 
 def _maybe_add_version(dataset_name: str) -> str:

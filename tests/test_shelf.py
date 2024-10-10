@@ -7,6 +7,7 @@ import pytest
 import yaml
 from shelf import (
     Shelf,
+    _table_aliases,
     audit_shelf,
     export_duckdb,
     list_steps,
@@ -566,3 +567,28 @@ def test_resolve_latest_dependency(setup_test_environment):
     # latest resolves to a date
     uri2_latest = StepURI.parse("snapshot://test_namespace/test_dataset2/latest")
     assert shelf.get_latest_version(uri2_latest) == uri2
+
+
+def test_table_aliases_empty():
+    assert _table_aliases([]) == []
+
+
+def test_table_aliases_single():
+    tables = ["a/b/c/2024-07-26"]
+    assert _table_aliases(tables) == [("c", "a_b_c_20240726")]
+
+
+def test_table_aliases_path_conflict():
+    tables = ["a/b/c/2024-07-26", "a/d/c/latest"]
+    assert _table_aliases(tables) == [
+        ("b_c", "a_b_c_20240726"),
+        ("d_c", "a_d_c_latest"),
+    ]
+
+
+def test_table_aliases_version_conflict():
+    tables = ["a/b/c/2024-07-26", "a/b/c/2024-10-03"]
+    assert _table_aliases(tables) == [
+        ("c_20240726", "a_b_c_20240726"),
+        ("c_20241003", "a_b_c_20241003"),
+    ]
