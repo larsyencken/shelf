@@ -26,6 +26,8 @@ certifi==2024.7.4
     # via minio
 cffi==1.16.0
     # via argon2-cffi-bindings
+duckdb==1.1.1
+    # via shelf
 iniconfig==2.0.0
     # via pytest
 jmespath==1.0.1
