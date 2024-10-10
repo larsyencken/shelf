@@ -106,12 +106,15 @@ class Snapshot:
 
         return snapshot
 
-    def save(self):
+    def save(self, comments: bool = True):
         # prep the metadata record
         record = self.to_dict()
         validate_snapshot(record)
 
-        save_yaml(record, self.metadata_path, include_comments=True)
+        if not comments:
+            record = prune_empty_values(record)
+
+        save_yaml(record, self.metadata_path, include_comments=comments)
 
     def to_dict(self) -> dict:
         record = asdict(self)
@@ -277,3 +280,12 @@ def fetch_from_s3(checksum: Checksum, dest_path: Path) -> None:
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     print_op("CACHE ADD", f"~/{cache_path.relative_to(Path.home())}")
     shutil.copy(dest_path, cache_path)
+
+
+def prune_empty_values(record):
+    record = record.copy()
+    for k, v in list(record.items()):
+        if v is None:
+            del record[k]
+
+    return record
