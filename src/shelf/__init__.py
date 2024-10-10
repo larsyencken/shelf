@@ -337,7 +337,7 @@ def duckdb_shell(shelf: Shelf, short: bool = True) -> None:
     if short:
         for alias, table_name in _table_aliases(tables):
             sql_parts.append(
-                f"CREATE OR REPLACE VIEW {alias} AS\nSELECT * FROM {table_name};"
+                f"CREATE OR REPLACE VIEW \"{alias}\" AS\nSELECT * FROM {table_name};"
             )
 
     sql = "\n\n".join(sql_parts)
