@@ -85,10 +85,10 @@ def _exec_sql_command(uri: StepURI, command: list[Path]) -> None:
     try:
         con.execute(sql)
 
-    except duckdb.duckdb.ParserException as e:
+    except duckdb.ParserException as e:
         raise ValueError(f"Error executing the following SQL\n\n{sql}\n\n{e}")
 
-    except duckdb.duckdb.BinderException as e:
+    except duckdb.BinderException as e:
         raise ValueError(f"Error executing the following SQL\n\n{sql}\n\n{e}")
 
     con.execute(f"COPY data TO '{output_file}' (FORMAT 'parquet')")
