@@ -129,7 +129,9 @@ class Snapshot:
 
         # then copy it over right away, as a convenience
         data_path = (SNAPSHOT_DIR / dataset_name).with_suffix(local_path.suffix)
-        copy_file(local_path, data_path)
+        if local_path != data_path:
+            # if you edit a snapshot in place, the paths may be the same
+            copy_file(local_path, data_path)
 
         # it tells us the s3 path to store it at
         add_to_s3(data_path, checksum)
