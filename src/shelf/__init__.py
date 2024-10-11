@@ -48,6 +48,12 @@ def main():
         action="store_true",
         help="Edit the metadata file in an interactive editor.",
     )
+    snapshot_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Overwrite an existing snapshot with the same name",
+    )
 
     run_parser = subparsers.add_parser(
         "run", help="Execute any outstanding steps in the DAG"
@@ -132,7 +138,9 @@ def main():
     shelf = Shelf()
 
     if args.command == "snapshot":
-        snapshot_to_shelf(Path(args.file_path), args.dataset_name, edit=args.edit)
+        snapshot_to_shelf(
+            Path(args.file_path), args.dataset_name, edit=args.edit, force=args.force
+        )
         return
 
     elif args.command == "list":
@@ -337,7 +345,7 @@ def duckdb_shell(shelf: Shelf, short: bool = True) -> None:
     if short:
         for alias, table_name in _table_aliases(tables):
             sql_parts.append(
-                f"CREATE OR REPLACE VIEW \"{alias}\" AS\nSELECT * FROM {table_name};"
+                f'CREATE OR REPLACE VIEW "{alias}" AS\nSELECT * FROM {table_name};'
             )
 
     sql = "\n\n".join(sql_parts)
