@@ -44,8 +44,9 @@ def prune_completed(dag: Dag) -> Dag:
     # walk the graph in topological order
     for step in graphlib.TopologicalSorter(dag).static_order():
         # a step needs re-running if any of its deps are dirty
-        is_dirty[step] = any(is_dirty[dep] for dep in dag[step]) or not is_completed(
-            step
+        deps = dag[step]
+        is_dirty[step] = any(is_dirty[dep] for dep in deps) or not is_completed(
+            step, deps
         )
 
     include = {step for step, dirty in is_dirty.items() if dirty}
@@ -53,12 +54,12 @@ def prune_completed(dag: Dag) -> Dag:
     return sub_dag
 
 
-def is_completed(step: StepURI) -> bool:
+def is_completed(step: StepURI, deps: list[StepURI]) -> bool:
     if step.scheme == "snapshot":
         return snapshots.is_completed(step)
 
     elif step.scheme == "table":
-        return tables.is_completed(step)
+        return tables.is_completed(step, deps)
 
     raise ValueError(f"Unknown scheme {step.scheme}")
 

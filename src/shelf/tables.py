@@ -16,6 +16,34 @@ from shelf.types import Manifest, StepURI
 from shelf.utils import checksum_file, load_yaml, print_op, save_yaml
 
 
+def is_completed(uri: StepURI, deps: list[StepURI]) -> bool:
+    assert uri.scheme == "table"
+
+    # the easy case; is it missing?
+    if (
+        not (TABLE_DIR / f"{uri.path}.parquet").exists()
+        or not _metadata_path(uri).exists()
+    ):
+        return False
+
+    # it's there, but is it up to date? check the manifest
+    metadata = load_yaml(_metadata_path(uri))
+    input_manifest = metadata["input_manifest"]
+
+    # we should spot every dependency in the manifest
+    for dep in deps:
+        dep_meta = _metadata_path(dep).as_posix()
+        if dep_meta not in input_manifest:
+            return False
+
+    # the dependencies should also be up to date
+    for path, checksum in input_manifest.items():
+        if not Path(path).exists() or checksum != checksum_file(path):
+            return False
+
+    return True
+
+
 def build_table(uri: StepURI, dependencies: list[StepURI]) -> None:
     assert uri.scheme == "table"
     command = _generate_build_command(uri, dependencies)
@@ -200,26 +228,6 @@ def _generate_input_manifest(uri: StepURI, dependencies: list[StepURI]) -> Manif
         manifest[str(dep_metadata_file)] = checksum_file(dep_metadata_file)
 
     return manifest
-
-
-def is_completed(uri: StepURI) -> bool:
-    assert uri.scheme == "table"
-
-    # the easy case; is it missing?
-    if (
-        not (TABLE_DIR / f"{uri.path}.parquet").exists()
-        or not _metadata_path(uri).exists()
-    ):
-        return False
-
-    # it's there, but is it up to date? check the manifest
-    metadata = load_yaml(_metadata_path(uri))
-    input_manifest = metadata["input_manifest"]
-    for path, checksum in input_manifest.items():
-        if not Path(path).exists() or checksum != checksum_file(path):
-            return False
-
-    return True
 
 
 def _infer_schema(uri: StepURI) -> dict[str, str]:
