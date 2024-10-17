@@ -14,7 +14,8 @@ Shelf is an opinionated small-scale ETL framework for managing data files and di
 - **First class metadata.** Every data file has an accompanying metadata sidecar that can be used to store provenance, licensing and other information.
 - **Content addressed.** A `shelf` DAG is a Merkle tree of checksums that includes data, metadata and scripts, used to lazily rebuild only what is out of date.
 - **Data versioning.** Every step in the DAG has a URI that includes a version, which can be an ISO date or `latest`, to encourage a reproducible workflow that still allows for change.
-- **Polyglot.** Shelf is a Python framework, but allows you to write step definitions in the tool of your choice, as long as they meet a simple signature.
+- **SQL support.** Shelf is a Python framework, but allows you to write steps in SQL which will be executed by DuckDB.
+- **Parquet interchange.** All derived tables are generated as Parquet, which makes reuse easier.
 
 ## Usage
 
