@@ -109,6 +109,9 @@ def main():
     export_parser.add_argument(
         "db_file", type=str, help="Path to the DuckDB file to export tables to"
     )
+    export_parser.add_argument(
+        "--short", action="store_true", help="Use minimal aliases for table names"
+    )
 
     new_table_parser = subparsers.add_parser(
         "new-table", help="Create a new table with optional dependencies"
@@ -153,7 +156,7 @@ def main():
         return audit_shelf(shelf, args.fix)
 
     elif args.command == "export-duckdb":
-        return export_duckdb(shelf, args.db_file)
+        return export_duckdb(shelf, args.db_file, args.short)
 
     elif args.command == "db":
         return duckdb_shell(shelf, short=args.no_short)
@@ -262,21 +265,31 @@ def resolve_latest(dependencies: list[StepURI], shelf: Shelf) -> list[StepURI]:
     return resolved
 
 
-def export_duckdb(shelf: Shelf, db_file: str) -> None:
+def export_duckdb(shelf: Shelf, db_file: str, short: bool = False) -> None:
     # Ensure all tables are built
     plan_and_run(shelf)
 
     # Connect to DuckDB
     conn = duckdb.connect(db_file)
 
-    for step in shelf.steps:
-        if step.scheme == "table":
-            table_name = step.path.replace("/", "_").replace("-", "").rsplit(".", 1)[0]
-            table_path = (Path("data/tables") / step.path).with_suffix(".parquet")
+    tables = _get_tables(shelf)
+    for table in tables:
+        table_name = table.replace("/", "_").replace("-", "").rsplit(".", 1)[0]
+        table_path = (Path("data/tables") / table).with_suffix(".parquet")
 
-            conn.execute(
-                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{table_path}')"
+        conn.execute(
+            f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{table_path}')"
+        )
+
+    if short:
+        min_alias = {}
+        for alias, table_name in _table_aliases(tables):
+            min_alias[table_name] = _shorter(
+                alias, min_alias.get(table_name, table_name)
             )
+
+        for table_name, alias in min_alias.items():
+            conn.execute(f'ALTER TABLE "{table_name}" RENAME TO "{alias}"')
 
     conn.close()
 
