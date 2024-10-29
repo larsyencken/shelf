@@ -107,14 +107,6 @@ class TableMetadata:
                 if col in df.columns and df[col].null_count() > 0:
                     errors.append(f"Column contains null values: {col}")
 
-            # Check dimension prefix requirement
-            if validation.get("require_dimension_prefix", True):
-                for col in df.columns:
-                    if not (col.startswith("dim_") or col.startswith("metric_")):
-                        errors.append(
-                            f"Column {col} must start with 'dim_' or 'metric_'"
-                        )
-
         return ValidationResult(not errors, errors)
 
     def generate(self, output_path: Path, dependencies: List[StepURI]) -> dict:
