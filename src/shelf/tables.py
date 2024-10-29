@@ -1,4 +1,3 @@
-import os
 import subprocess
 import sys
 from collections import Counter
@@ -9,34 +8,38 @@ import duckdb
 import jsonschema
 import polars as pl
 
-from shelf.paths import SNAPSHOT_DIR, TABLE_DIR, TABLE_SCRIPT_DIR
+from shelf.exceptions import ValidationError
+from shelf.paths import TABLE_DIR
 from shelf.schemas import TABLE_SCHEMA
 from shelf.snapshots import Snapshot
+from shelf.table_metadata import _get_executable, _metadata_path, process_table_metadata
 from shelf.types import Manifest, StepURI
 from shelf.utils import checksum_file, load_yaml, print_op, save_yaml
 
 
 def is_completed(uri: StepURI, deps: list[StepURI]) -> bool:
+    """Check if a table is up to date."""
     assert uri.scheme == "table"
 
-    # the easy case; is it missing?
-    if (
-        not (TABLE_DIR / f"{uri.path}.parquet").exists()
-        or not _metadata_path(uri).exists()
-    ):
+    # Check if files exist
+    table_path = TABLE_DIR / f"{uri.path}.parquet"
+    metadata_path = _metadata_path(uri)
+    if not (table_path.exists() and metadata_path.exists()):
         return False
 
-    # it's there, but is it up to date? check the manifest
-    metadata = load_yaml(_metadata_path(uri))
+    # Load metadata and check dependencies
+    metadata = load_yaml(metadata_path)
     input_manifest = metadata["input_manifest"]
 
-    # we should spot every dependency in the manifest
-    for dep in deps:
-        dep_meta = _metadata_path(dep).as_posix()
-        if dep_meta not in input_manifest:
+    # Check if metadata config exists and is up to date
+    config_path = Path(_get_executable(uri)).with_suffix(".meta.yaml")
+    if config_path.exists():
+        if str(config_path) not in input_manifest:
+            return False
+        if checksum_file(config_path) != input_manifest[str(config_path)]:
             return False
 
-    # the dependencies should also be up to date
+    # Check script and dependency checksums
     for path, checksum in input_manifest.items():
         if not Path(path).exists() or checksum != checksum_file(path):
             return False
@@ -45,10 +48,33 @@ def is_completed(uri: StepURI, deps: list[StepURI]) -> bool:
 
 
 def build_table(uri: StepURI, dependencies: list[StepURI]) -> None:
+    """Build a table and handle its metadata."""
     assert uri.scheme == "table"
+
+    # Generate the table first
     command = _generate_build_command(uri, dependencies)
-    _exec_command(uri, command)
-    _gen_metadata(uri, dependencies)
+    dest_path = TABLE_DIR / f"{uri.path}.parquet"
+
+    if dest_path.exists():
+        dest_path.unlink()
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Execute the table creation
+    if command[0].suffix == ".sql":
+        _exec_sql_command(uri, command)
+    else:
+        _exec_python_command(uri, command)
+
+    if not dest_path.exists():
+        raise Exception(f"Table step {uri} did not generate the expected {dest_path}")
+
+    # Process metadata after table is created
+    try:
+        process_table_metadata(uri, dependencies, dest_path)
+    except ValidationError:
+        # If metadata validation fails, remove the invalid table
+        dest_path.unlink()
+        raise
 
 
 def _generate_build_command(uri: StepURI, dependencies: list[StepURI]) -> list[Path]:
@@ -74,29 +100,17 @@ def _dependency_path(uri: StepURI) -> Path:
         raise ValueError(f"Unknown scheme {uri.scheme}")
 
 
-def _is_valid_script(script: Path) -> bool:
-    return script.is_file() and os.access(script, os.X_OK)
-
-
-def _exec_command(uri: StepURI, command: list[Path]) -> None:
-    print_op("EXECUTE", command[0])
-    dest_path = command[-1]
-    if dest_path.exists():
-        dest_path.unlink()
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if command[0].suffix == ".sql":
-        _exec_sql_command(uri, command)
-    else:
-        _exec_python_command(uri, command)
-
-    if not dest_path.exists():
-        raise Exception(f"Table step {uri} did not generate the expected {dest_path}")
-
-
 def _exec_python_command(uri: StepURI, command: list[Path]) -> None:
+    output_file = command[-1]
+    is_update = output_file.exists()
+
     command_s = [sys.executable] + [str(p.resolve()) for p in command]
     subprocess.run(command_s, check=True)
+
+    if is_update:
+        print_op("UPDATE", output_file)
+    else:
+        print_op("CREATE", output_file)
 
 
 def _exec_sql_command(uri: StepURI, command: list[Path]) -> None:
@@ -119,7 +133,13 @@ def _exec_sql_command(uri: StepURI, command: list[Path]) -> None:
     except duckdb.BinderException as e:
         raise ValueError(f"Error executing the following SQL\n\n{sql}\n\n{e}")
 
+    is_update = output_file.exists()
+
     con.execute(f"COPY data TO '{output_file}' (FORMAT 'parquet')")
+    if is_update:
+        print_op("UPDATE", output_file)
+    else:
+        print_op("CREATE", output_file)
 
 
 def _generate_candidate_names(dep: Path) -> Iterator[str]:
@@ -164,17 +184,6 @@ def _simplify_dependency_names(deps: list[Path]) -> dict[str, Path]:
                 del frontier[d]
 
     return mapping
-
-
-def _metadata_path(uri: StepURI) -> Path:
-    if uri.scheme == "snapshot":
-        return (SNAPSHOT_DIR / uri.path).with_suffix(".meta.yaml")
-
-    elif uri.scheme == "table":
-        return (TABLE_DIR / f"{uri.path}.parquet").with_suffix(".meta.yaml")
-
-    else:
-        raise ValueError(f"Unknown scheme {uri.scheme}")
 
 
 def _gen_metadata(uri: StepURI, dependencies: list[StepURI]) -> None:
@@ -234,26 +243,6 @@ def _infer_schema(uri: StepURI) -> dict[str, str]:
     data_path = TABLE_DIR / f"{uri.path}.parquet"
     df = pl.read_parquet(data_path)
     return {col: str(dtype) for col, dtype in df.schema.items()}
-
-
-def _get_executable(uri: StepURI, check: bool = True) -> Path:
-    base = TABLE_SCRIPT_DIR / uri.path
-
-    for exec_base in [base, base.parent]:
-        py_script = exec_base.with_suffix(".py")
-        sql_script = exec_base.with_suffix(".sql")
-
-        if py_script.exists():
-            if check and not _is_valid_script(py_script):
-                raise Exception(f"Missing execute permissions on {py_script}")
-
-            return py_script
-
-        elif sql_script.exists():
-            return sql_script
-
-    else:
-        raise FileNotFoundError(f"Could not find script for {uri}")
 
 
 def add_placeholder_script(uri: StepURI) -> Path:
