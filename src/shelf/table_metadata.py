@@ -18,7 +18,6 @@ from shelf.utils import checksum_file, load_yaml, save_yaml
 
 console = Console()
 
-
 @dataclass
 class ValidationResult:
     passed: bool
@@ -56,10 +55,17 @@ class TableMetadata:
 
     def resolve_inheritance(self, dependencies: List[StepURI]) -> None:
         """Resolve and validate inherited metadata from dependencies."""
-        if not self.config.get("inherit"):
+        if not self.config and len(dependencies) == 1:
+            # default to inheriting all fields from the single dependency
+            inherit = {str(dependencies[0]): {"fields": ["name", "description", "source_name", "source_url", "access_notes", "license", "license_url"]}}
+        else:
+            # otherwise, use the specified inheritance
+            inherit = self.config.get("inherit")
+
+        if not inherit:
             return
 
-        for dep_uri, settings in self.config["inherit"].items():
+        for dep_uri, settings in inherit.items():
             dep = StepURI.parse(dep_uri)
             if dep not in dependencies:
                 raise ValidationError(
