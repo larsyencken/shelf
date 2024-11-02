@@ -124,11 +124,21 @@ def main():
         help="Edit the metadata file in an interactive editor.",
     )
 
-    db_parser = subparsers.add_parser("db", help="Enter a DuckDB shell")
+    db_parser = subparsers.add_parser("db", help="Enter a DuckDB shell or execute a query")
+    db_parser.add_argument(
+        "query",
+        nargs="?",
+        help="SQL query to execute (if not provided, enters interactive shell)",
+    )
     db_parser.add_argument(
         "--no-short",
         action="store_false",
         help="Disable shorter aliases for table names",
+    )
+    db_parser.add_argument(
+        "--csv",
+        action="store_true",
+        help="Output results in CSV format instead of JSON",
     )
 
     args = parser.parse_args()
@@ -157,6 +167,8 @@ def main():
         return export_duckdb(shelf, args.db_file, args.short)
 
     elif args.command == "db":
+        if args.query:
+            return execute_query(shelf, args.query, short=args.no_short, csv=args.csv)
         return duckdb_shell(shelf, short=args.no_short)
 
     elif args.command == "new-table":
@@ -339,6 +351,33 @@ def new_table(
 
     shelf.steps[table_uri] = [StepURI.parse(dep) for dep in dependencies]
     shelf.save()
+
+
+def execute_query(shelf: Shelf, query: str, short: bool = True, csv: bool = False) -> None:
+    tables = _get_tables(shelf)
+    
+    # Create temporary views
+    conn = duckdb.connect(':memory:')
+    for path in tables:
+        table_name = _path_to_snake(path)
+        table_path = (Path("data/tables") / path).with_suffix(".parquet")
+        conn.execute(
+            f"CREATE VIEW {table_name} AS SELECT * FROM read_parquet('{table_path}')"
+        )
+
+    if short:
+        for alias, table_name in _table_aliases(tables):
+            conn.execute(
+                f'CREATE VIEW "{alias}" AS SELECT * FROM {table_name}'
+            )
+    
+    # Execute query and format output
+    result = conn.execute(query).fetchdf()
+    if csv:
+        print(result.to_csv(index=False))
+    else:
+        print(result.to_json(orient='records'))
+    conn.close()
 
 
 def duckdb_shell(shelf: Shelf, short: bool = True) -> None:
