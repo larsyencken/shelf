@@ -1,7 +1,7 @@
 import subprocess
 import sys
-from datetime import datetime
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -72,7 +72,10 @@ def _execute_table_build(
     """Execute the table build and return runtime information."""
     command = _generate_build_command(uri, dependencies)
     start_time = datetime.now()
-    runtime_info = {"start_time": start_time.isoformat(), "status": "failed"}
+    runtime_info: dict[str, Any] = {
+        "start_time": start_time.isoformat(),
+        "status": "failed",
+    }
 
     try:
         if command[0].suffix == ".sql":
@@ -90,11 +93,13 @@ def _execute_table_build(
     except Exception as e:
         runtime_info["error"] = str(e)
         raise
+
     finally:
         end_time = datetime.now()
         runtime_info["end_time"] = end_time.isoformat()
         runtime_info["duration_seconds"] = round(
-            (end_time - start_time).total_seconds(), 2  # type: ignore
+            (end_time - start_time).total_seconds(),
+            2,  # type: ignore
         )
 
     return runtime_info
