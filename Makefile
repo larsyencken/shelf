@@ -1,7 +1,7 @@
 .PHONY: help unittest format lint typecheck test
 
 # Default target
-help: 
+help:
 	@echo "Available targets:"
 	@echo "  make unittest  - Run unittests with pytest"
 	@echo "  make format    - Reformat using rye"
@@ -13,6 +13,7 @@ help:
 .venv: pyproject.toml
 	@echo "==> Installing packages"
 	@rye sync
+	@touch $@
 
 # Run unittests with pytest
 unittest: .venv
