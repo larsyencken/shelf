@@ -4,8 +4,8 @@
 help:
 	@echo "Available targets:"
 	@echo "  make unittest  - Run unittests with pytest"
-	@echo "  make format    - Reformat using rye"
-	@echo "  make lint      - Lint using rye"
+	@echo "  make format    - Reformat using ruff"
+	@echo "  make lint      - Lint using ruff"
 	@echo "  make typecheck - Typecheck with pyright"
 	@echo "  make test      - Run lint, typecheck, and unittest sequentially"
 
@@ -18,7 +18,7 @@ help:
 # Run unittests with pytest
 unittest: .venv
 	@echo "==> Running unit tests"
-	@rye test -- --sw
+	@uv run pytest --sw
 
 # Reformat using rye
 format: .venv
