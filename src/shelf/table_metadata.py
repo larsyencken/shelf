@@ -2,7 +2,6 @@
 
 import os
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -17,6 +16,7 @@ from shelf.types import StepURI
 from shelf.utils import checksum_file, load_yaml, save_yaml
 
 console = Console()
+
 
 @dataclass
 class ValidationResult:
@@ -57,7 +57,19 @@ class TableMetadata:
         """Resolve and validate inherited metadata from dependencies."""
         if not self.config and len(dependencies) == 1:
             # default to inheriting all fields from the single dependency
-            inherit = {str(dependencies[0]): {"fields": ["name", "description", "source_name", "source_url", "access_notes", "license", "license_url"]}}
+            inherit = {
+                str(dependencies[0]): {
+                    "fields": [
+                        "name",
+                        "description",
+                        "source_name",
+                        "source_url",
+                        "access_notes",
+                        "license",
+                        "license_url",
+                    ]
+                }
+            }
         else:
             # otherwise, use the specified inheritance
             inherit = self.config.get("inherit")
@@ -166,7 +178,10 @@ class TableMetadata:
 
 
 def process_table_metadata(
-    uri: StepURI, dependencies: List[StepURI], output_path: Path
+    uri: StepURI,
+    dependencies: List[StepURI],
+    output_path: Path,
+    runtime_info: Dict[str, Any],
 ) -> None:
     """Main function to handle table metadata processing."""
     metadata = TableMetadata(uri)
@@ -174,37 +189,19 @@ def process_table_metadata(
     # Pre-execution
     metadata.resolve_inheritance(dependencies)
 
-    # Record execution metadata
-    start_time = datetime.now()
-    metadata.runtime["start_time"] = start_time.isoformat()
+    # Use the runtime info from table execution
+    metadata.runtime = runtime_info
 
-    try:
-        # Read the generated table
-        df = pl.read_parquet(output_path)
+    # Read and validate the generated table
+    df = pl.read_parquet(output_path)
+    validation_result = metadata.validate_schema(df)
+    if not validation_result:
+        error_msg = "\n".join(validation_result.errors)
+        raise ValidationError(f"Table validation failed for {uri}:\n{error_msg}")
 
-        # Validate
-        validation_result = metadata.validate_schema(df)
-        if not validation_result:
-            error_msg = "\n".join(validation_result.errors)
-            raise ValidationError(f"Table validation failed for {uri}:\n{error_msg}")
-
-        # Record success
-        metadata.runtime["status"] = "success"
-
-    except Exception as e:
-        metadata.runtime["status"] = "failed"
-        metadata.runtime["error"] = str(e)
-        raise
-
-    finally:
-        # Record completion time
-        end_time = datetime.now()
-        metadata.runtime["end_time"] = end_time.isoformat()
-        metadata.runtime["duration_seconds"] = (end_time - start_time).total_seconds()
-
-        # Generate and save final metadata
-        final_metadata = metadata.generate(output_path, dependencies)
-        save_yaml(final_metadata, _metadata_path(uri))
+    # Generate and save final metadata
+    final_metadata = metadata.generate(output_path, dependencies)
+    save_yaml(final_metadata, _metadata_path(uri))
 
 
 def _get_executable(uri: StepURI, check: bool = True) -> Path:

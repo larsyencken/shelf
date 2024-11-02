@@ -1,8 +1,9 @@
 import subprocess
 import sys
+from datetime import datetime
 from collections import Counter
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 import duckdb
 import jsonschema
@@ -51,28 +52,61 @@ def build_table(uri: StepURI, dependencies: list[StepURI]) -> None:
     """Build a table and handle its metadata."""
     assert uri.scheme == "table"
 
-    # Generate the table first
-    command = _generate_build_command(uri, dependencies)
-    dest_path = TABLE_DIR / f"{uri.path}.parquet"
+    dest_path = _prepare_output_path(uri)
+    runtime_info = _execute_table_build(uri, dependencies, dest_path)
+    _handle_metadata(uri, dependencies, dest_path, runtime_info)
 
+
+def _prepare_output_path(uri: StepURI) -> Path:
+    """Prepare the output directory and return the destination path."""
+    dest_path = TABLE_DIR / f"{uri.path}.parquet"
     if dest_path.exists():
         dest_path.unlink()
     dest_path.parent.mkdir(parents=True, exist_ok=True)
+    return dest_path
 
-    # Execute the table creation
-    if command[0].suffix == ".sql":
-        _exec_sql_command(uri, command)
-    else:
-        _exec_python_command(uri, command)
 
-    if not dest_path.exists():
-        raise Exception(f"Table step {uri} did not generate the expected {dest_path}")
+def _execute_table_build(
+    uri: StepURI, dependencies: list[StepURI], dest_path: Path
+) -> dict[str, Any]:
+    """Execute the table build and return runtime information."""
+    command = _generate_build_command(uri, dependencies)
+    start_time = datetime.now()
+    runtime_info = {"start_time": start_time.isoformat(), "status": "failed"}
 
-    # Process metadata after table is created
     try:
-        process_table_metadata(uri, dependencies, dest_path)
+        if command[0].suffix == ".sql":
+            _exec_sql_command(uri, command)
+        else:
+            _exec_python_command(uri, command)
+
+        if not dest_path.exists():
+            raise Exception(
+                f"Table step {uri} did not generate the expected {dest_path}"
+            )
+
+        runtime_info["status"] = "success"
+
+    except Exception as e:
+        runtime_info["error"] = str(e)
+        raise
+    finally:
+        end_time = datetime.now()
+        runtime_info["end_time"] = end_time.isoformat()
+        runtime_info["duration_seconds"] = round(
+            (end_time - start_time).total_seconds(), 2  # type: ignore
+        )
+
+    return runtime_info
+
+
+def _handle_metadata(
+    uri: StepURI, dependencies: list[StepURI], dest_path: Path, runtime_info: dict
+) -> None:
+    """Process and validate the table metadata."""
+    try:
+        process_table_metadata(uri, dependencies, dest_path, runtime_info)
     except ValidationError:
-        # If metadata validation fails, remove the invalid table
         dest_path.unlink()
         raise
 
