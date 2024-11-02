@@ -3,7 +3,7 @@ import sys
 from datetime import datetime
 from collections import Counter
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 import duckdb
 import jsonschema
@@ -66,7 +66,9 @@ def _prepare_output_path(uri: StepURI) -> Path:
     return dest_path
 
 
-def _execute_table_build(uri: StepURI, dependencies: list[StepURI], dest_path: Path) -> dict:
+def _execute_table_build(
+    uri: StepURI, dependencies: list[StepURI], dest_path: Path
+) -> dict[str, Any]:
     """Execute the table build and return runtime information."""
     command = _generate_build_command(uri, dependencies)
     start_time = datetime.now()
@@ -79,22 +81,28 @@ def _execute_table_build(uri: StepURI, dependencies: list[StepURI], dest_path: P
             _exec_python_command(uri, command)
 
         if not dest_path.exists():
-            raise Exception(f"Table step {uri} did not generate the expected {dest_path}")
+            raise Exception(
+                f"Table step {uri} did not generate the expected {dest_path}"
+            )
 
         runtime_info["status"] = "success"
-        
+
     except Exception as e:
         runtime_info["error"] = str(e)
         raise
     finally:
         end_time = datetime.now()
         runtime_info["end_time"] = end_time.isoformat()
-        runtime_info["duration_seconds"] = str((end_time - start_time).total_seconds())
-    
+        runtime_info["duration_seconds"] = round(
+            (end_time - start_time).total_seconds(), 2  # type: ignore
+        )
+
     return runtime_info
 
 
-def _handle_metadata(uri: StepURI, dependencies: list[StepURI], dest_path: Path, runtime_info: dict) -> None:
+def _handle_metadata(
+    uri: StepURI, dependencies: list[StepURI], dest_path: Path, runtime_info: dict
+) -> None:
     """Process and validate the table metadata."""
     try:
         process_table_metadata(uri, dependencies, dest_path, runtime_info)
