@@ -23,8 +23,6 @@ load_dotenv()
 
 BLACKLIST = [".DS_Store"]
 
-SCHEMA_PATH = Path(__file__).parent / "shelf-v1.schema.json"
-
 
 def main():
     parser = argparse.ArgumentParser(
