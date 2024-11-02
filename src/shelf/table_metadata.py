@@ -17,6 +17,7 @@ from shelf.utils import checksum_file, load_yaml, save_yaml
 
 console = Console()
 
+
 @dataclass
 class ValidationResult:
     passed: bool
@@ -56,7 +57,19 @@ class TableMetadata:
         """Resolve and validate inherited metadata from dependencies."""
         if not self.config and len(dependencies) == 1:
             # default to inheriting all fields from the single dependency
-            inherit = {str(dependencies[0]): {"fields": ["name", "description", "source_name", "source_url", "access_notes", "license", "license_url"]}}
+            inherit = {
+                str(dependencies[0]): {
+                    "fields": [
+                        "name",
+                        "description",
+                        "source_name",
+                        "source_url",
+                        "access_notes",
+                        "license",
+                        "license_url",
+                    ]
+                }
+            }
         else:
             # otherwise, use the specified inheritance
             inherit = self.config.get("inherit")
@@ -165,7 +178,10 @@ class TableMetadata:
 
 
 def process_table_metadata(
-    uri: StepURI, dependencies: List[StepURI], output_path: Path, runtime_info: Dict[str, Any]
+    uri: StepURI,
+    dependencies: List[StepURI],
+    output_path: Path,
+    runtime_info: Dict[str, Any],
 ) -> None:
     """Main function to handle table metadata processing."""
     metadata = TableMetadata(uri)
