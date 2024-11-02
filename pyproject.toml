@@ -7,7 +7,6 @@ dependencies = [
     "boto3>=1.34.145",
     "pyyaml>=6.0.1",
     "python-dotenv>=1.0.1",
-    "pyright>=1.1.372",
     "jsonschema>=4.23.0",
     "ruff>=0.5.5",
     "rich>=13.7.1",
@@ -36,5 +35,8 @@ packages = ["src/shelf"]
 
 [tool.uv]
 dev-dependencies = [
+    "minio>=7.2.10",
+    "pyright>=1.1.387",
     "pytest>=8.3.3",
+    "ruff>=0.7.2",
 ]
