@@ -55,14 +55,22 @@ def print_op(type_: str, message: Any) -> None:
 
 def add_to_gitignore(path: Path) -> None:
     gitignore = Path(".gitignore")
+    path_str = str(path.relative_to(BASE_DIR))
 
-    if not gitignore.exists():
-        print_op("CREATE", ".gitignore")
-    else:
+    if gitignore.exists():
+        with open(gitignore) as f:
+            entries = set(line.strip() for line in f if line.strip())
+
+        if path_str in entries:
+            # it's already here
+            return
+
         print_op("UPDATE", ".gitignore")
+    else:
+        print_op("CREATE", ".gitignore")
 
     with gitignore.open("a") as f:
-        print(path.relative_to(BASE_DIR), file=f)
+        print(path_str, file=f)
 
 
 def dump_yaml_with_comments(obj: dict, f) -> None:

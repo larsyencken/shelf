@@ -10,7 +10,7 @@ import shutil
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Literal, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 import boto3
 import jsonschema
@@ -76,15 +76,23 @@ class Snapshot:
         return Snapshot(**metadata)
 
     @staticmethod
-    def create(local_path: Path, dataset_name: str) -> "Snapshot":
+    def create(
+        local_path: Path, dataset_name: str, metadata: Optional[dict[str, Any]] = None
+    ) -> "Snapshot":
         if local_path.is_dir():
-            return Snapshot.create_from_directory(local_path, dataset_name)
+            snapshot = Snapshot.create_from_directory(
+                local_path, dataset_name, metadata
+            )
         else:
-            return Snapshot.create_from_file(local_path, dataset_name)
+            snapshot = Snapshot.create_from_file(local_path, dataset_name, metadata)
+
+        return snapshot
 
     @staticmethod
     def create_from_directory(
-        local_path: Path, dataset_name: DatasetName
+        local_path: Path,
+        dataset_name: DatasetName,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> "Snapshot":
         data_path = SNAPSHOT_DIR / dataset_name
 
@@ -101,10 +109,24 @@ class Snapshot:
             checksum=checksum,
             snapshot_type="directory",
             manifest=manifest,
+            **(metadata or {}),
         )
         snapshot.save()
 
         return snapshot
+
+    def get_metadata(self) -> dict:
+        """Get all metadata fields that should be preserved"""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "source_name": self.source_name,
+            "source_url": self.source_url,
+            "date_accessed": self.date_accessed,
+            "access_notes": self.access_notes,
+            "license": self.license,
+            "license_url": self.license_url,
+        }
 
     def save(self, comments: bool = True):
         # prep the metadata record
@@ -123,7 +145,9 @@ class Snapshot:
         return record
 
     @staticmethod
-    def create_from_file(local_path: Path, dataset_name: DatasetName) -> "Snapshot":
+    def create_from_file(
+        local_path: Path, dataset_name: DatasetName, metadata: Optional[dict[str, Any]]
+    ) -> "Snapshot":
         # first we checksum
         checksum = checksum_file(local_path)
 
@@ -142,6 +166,7 @@ class Snapshot:
             checksum=checksum,
             snapshot_type="file",
             extension=local_path.suffix,
+            **(metadata or {}),
         )
         snapshot.save()
 

@@ -124,7 +124,9 @@ def main():
         help="Edit the metadata file in an interactive editor.",
     )
 
-    db_parser = subparsers.add_parser("db", help="Enter a DuckDB shell or execute a query")
+    db_parser = subparsers.add_parser(
+        "db", help="Enter a DuckDB shell or execute a query"
+    )
     db_parser.add_argument(
         "query",
         nargs="?",
@@ -196,11 +198,17 @@ def snapshot_to_shelf(
     if proposed_uri in shelf.steps and not force:
         raise ValueError(f"Dataset already exists in shelf: {proposed_uri}")
 
+    existing_metadata = {}
+    if proposed_uri in shelf.steps:
+        for k, v in Snapshot.load(dataset_name).get_metadata().items():
+            if k not in ["checksum", "manifest", "date_accessed"]:
+                existing_metadata[k] = v
+
     # create and add to s3
     print(f"Creating {proposed_uri}")
-    snapshot = Snapshot.create(file_path, dataset_name)
+    snapshot = Snapshot.create(file_path, dataset_name, existing_metadata)
 
-    # ensure that the data itself does not enter git
+    # ensure that the data itself does not enter git (if not already ignored)
     add_to_gitignore(snapshot.path)
 
     if edit:
@@ -353,11 +361,13 @@ def new_table(
     shelf.save()
 
 
-def execute_query(shelf: Shelf, query: str, short: bool = True, csv: bool = False) -> None:
+def execute_query(
+    shelf: Shelf, query: str, short: bool = True, csv: bool = False
+) -> None:
     tables = _get_tables(shelf)
-    
+
     # Create temporary views
-    conn = duckdb.connect(':memory:')
+    conn = duckdb.connect(":memory:")
     for path in tables:
         table_name = _path_to_snake(path)
         table_path = (Path("data/tables") / path).with_suffix(".parquet")
@@ -367,16 +377,14 @@ def execute_query(shelf: Shelf, query: str, short: bool = True, csv: bool = Fals
 
     if short:
         for alias, table_name in _table_aliases(tables):
-            conn.execute(
-                f'CREATE VIEW "{alias}" AS SELECT * FROM {table_name}'
-            )
-    
+            conn.execute(f'CREATE VIEW "{alias}" AS SELECT * FROM {table_name}')
+
     # Execute query and format output
     result = conn.execute(query).fetchdf()
     if csv:
         print(result.to_csv(index=False))
     else:
-        print(result.to_json(orient='records'))
+        print(result.to_json(orient="records"))
     conn.close()
 
 
