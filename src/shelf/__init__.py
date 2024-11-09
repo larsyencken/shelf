@@ -132,9 +132,10 @@ def main():
         help="SQL query to execute (if not provided, enters interactive shell)",
     )
     db_parser.add_argument(
-        "--no-short",
-        action="store_false",
-        help="Disable shorter aliases for table names",
+        "--names",
+        action="store",
+        default='both',
+        help="What kind of names to use for tables (short|full|[both])",
     )
     db_parser.add_argument(
         "--csv",
@@ -169,8 +170,8 @@ def main():
 
     elif args.command == "db":
         if args.query:
-            return execute_query(shelf, args.query, short=args.no_short, csv=args.csv)
-        return duckdb_shell(shelf, short=args.no_short)
+            return execute_query(shelf, args.query, names=args.names, csv=args.csv)
+        return duckdb_shell(shelf, names=args.names)
 
     elif args.command == "new-table":
         return new_table(shelf, args.table_path, args.dependencies, args.edit)
@@ -385,7 +386,10 @@ def execute_query(
     conn.close()
 
 
-def duckdb_shell(shelf: Shelf, short: bool = True) -> None:
+def duckdb_shell(shelf: Shelf, names: str = 'both') -> None:
+    if names not in ('both', 'short', 'full'):
+        raise ValueError(f"Names parameter must be one of 'short', 'full' or 'both'")
+
     tables = _get_tables(shelf)
 
     sql_parts = []
@@ -397,11 +401,16 @@ def duckdb_shell(shelf: Shelf, short: bool = True) -> None:
             f"CREATE OR REPLACE VIEW {table_name} AS\nSELECT * FROM read_parquet('{table_path}');"
         )
 
-    if short:
+    if names != 'full':
         for alias, table_name in _table_aliases(tables):
-            sql_parts.append(
-                f'CREATE OR REPLACE VIEW "{alias}" AS\nSELECT * FROM {table_name};'
-            )
+            if names == 'short':
+                sql_parts.append(
+                    f'ALTER VIEW "{table_name}" RENAME TO "{alias}";'
+                )
+            elif names == 'both':
+                sql_parts.append(
+                    f'CREATE OR REPLACE VIEW "{alias}" AS\nSELECT * FROM {table_name};'
+                )
 
     sql = "\n\n".join(sql_parts)
     with tempfile.NamedTemporaryFile("w", suffix=".sql") as f:
