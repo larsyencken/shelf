@@ -6,7 +6,6 @@ import tempfile
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import duckdb
 from dotenv import load_dotenv
@@ -220,15 +219,13 @@ def snapshot_to_shelf(
     return snapshot
 
 
-def list_steps_cmd(
-    shelf: Shelf, regex: Optional[str] = None, paths: bool = False
-) -> None:
+def list_steps_cmd(shelf: Shelf, regex: str | None = None, paths: bool = False) -> None:
     for step in list_steps(shelf, regex, paths):
         print(step)
 
 
 def list_steps(
-    shelf: Shelf, regex: Optional[str] = None, paths: bool = False
+    shelf: Shelf, regex: str | None = None, paths: bool = False
 ) -> list[Path] | list[StepURI]:
     steps = sorted(shelf.steps)
 
@@ -243,7 +240,7 @@ def list_steps(
 
 def plan_and_run(
     shelf: Shelf,
-    regex: Optional[str] = None,
+    regex: str | None = None,
     force: bool = False,
     dry_run: bool = False,
 ) -> None:
@@ -402,6 +399,8 @@ def duckdb_shell(shelf: Shelf, short: bool = True) -> None:
 
     if short:
         for alias, table_name in _table_aliases(tables):
+            if "perma" in table_name:
+                print(alias, "-->", table_name)
             sql_parts.append(
                 f'CREATE OR REPLACE VIEW "{alias}" AS\nSELECT * FROM {table_name};'
             )
@@ -428,7 +427,7 @@ def _get_tables(shelf: Shelf) -> list[str]:
 
 def _table_aliases(tables: list[str]) -> list[tuple[str, str]]:
     # map potential aliases to table names
-    potential_aliases = defaultdict(set)
+    potential_aliases: dict[str, set[str]] = defaultdict(set)
     for path in tables:
         parts = path.split("/")
 
@@ -445,26 +444,30 @@ def _table_aliases(tables: list[str]) -> list[tuple[str, str]]:
                 potential_aliases[with_version].add(path)
 
     # only keep unique ones
-    min_alias = {}
+    best_alias: dict[str, str] = {}
     for alias, paths in potential_aliases.items():
         if len(paths) == 1:
+            # this is a potentially unique alias
             (path,) = paths
             table_alias = _path_to_snake(alias)
             table_name = _path_to_snake(path)
 
-            min_alias[table_name] = _shorter(table_alias, min_alias.get(table_name))
+            best_alias[table_name] = _better_alias(
+                table_alias, best_alias.get(table_name)
+            )
 
-    return [(table_alias, table_name) for table_name, table_alias in min_alias.items()]
+    return [(table_alias, table_name) for table_name, table_alias in best_alias.items()]
 
 
-def _shorter(a: str, b: Optional[str]) -> str:
+def _better_alias(a: str, b: str | None) -> str:
     if not b:
         return a
 
-    if len(a) < len(b):
-        return a
+    return min([(_has_version(a), len(a), a), (_has_version(b), len(b), b)])[-1]
 
-    return b
+
+def _has_version(name: str) -> bool:
+    return bool(re.match(r".*_((d{4}-\d{2}-\d{2})|latest)$", name))
 
 
 def _maybe_add_version(dataset_name: str) -> str:
