@@ -297,13 +297,13 @@ def export_duckdb(shelf: Shelf, db_file: str, short: bool = False) -> None:
         )
 
     if short:
-        min_alias = {}
+        best_alias = {}
         for alias, table_name in _table_aliases(tables):
-            min_alias[table_name] = _shorter(
-                alias, min_alias.get(table_name, table_name)
+            best_alias[table_name] = _better_alias(
+                alias, best_alias.get(table_name, table_name)
             )
 
-        for table_name, alias in min_alias.items():
+        for table_name, alias in best_alias.items():
             conn.execute(f'ALTER TABLE "{table_name}" RENAME TO "{alias}"')
 
     conn.close()
@@ -399,8 +399,6 @@ def duckdb_shell(shelf: Shelf, short: bool = True) -> None:
 
     if short:
         for alias, table_name in _table_aliases(tables):
-            if "perma" in table_name:
-                print(alias, "-->", table_name)
             sql_parts.append(
                 f'CREATE OR REPLACE VIEW "{alias}" AS\nSELECT * FROM {table_name};'
             )
