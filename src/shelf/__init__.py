@@ -305,6 +305,7 @@ def export_duckdb(shelf: Shelf, db_file: str, short: bool = False) -> None:
             )
 
         for table_name, alias in best_alias.items():
+            conn.execute(f'DROP TABLE IF EXISTS "{alias}"')
             conn.execute(f'ALTER TABLE "{table_name}" RENAME TO "{alias}"')
 
     conn.close()
