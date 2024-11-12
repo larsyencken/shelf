@@ -6,6 +6,7 @@ import tempfile
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 import duckdb
 from dotenv import load_dotenv
@@ -361,7 +362,7 @@ def new_table(
 
 
 def execute_query(
-    shelf: Shelf, query: str, short: bool = True, csv: bool = False
+    shelf: Shelf, query: str, names: Literal['short', 'full', 'both'] = 'both', csv: bool = False
 ) -> None:
     tables = _get_tables(shelf)
 
@@ -374,9 +375,13 @@ def execute_query(
             f"CREATE VIEW {table_name} AS SELECT * FROM read_parquet('{table_path}')"
         )
 
-    if short:
+    if names == 'both':
         for alias, table_name in _table_aliases(tables):
-            conn.execute(f'CREATE VIEW "{alias}" AS SELECT * FROM {table_name}')
+            conn.execute(f'CREATE VIEW "{alias}" AS SELECT * FROM "{table_name}"')
+
+    elif names == 'short':
+        for alias, table_name in _table_aliases(tables):
+            conn.execute(f'ALTER VIEW "{table_name}" RENAME TO "{alias}"')
 
     # Execute query and format output
     result = conn.execute(query).fetchdf()
@@ -389,11 +394,11 @@ def execute_query(
 
 def duckdb_shell(shelf: Shelf, names: str = 'both') -> None:
     if names not in ('both', 'short', 'full'):
-        raise ValueError(f"Names parameter must be one of 'short', 'full' or 'both'")
+        raise ValueError("Names parameter must be one of 'short', 'full' or 'both'")
 
     tables = _get_tables(shelf)
 
-    sql_parts = []
+    sql_parts: list[str] = []
     for path in tables:
         table_name = _path_to_snake(path)
         table_path = (Path("data/tables") / path).with_suffix(".parquet")
