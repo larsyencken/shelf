@@ -383,12 +383,17 @@ def execute_query(
         for alias, table_name in _table_aliases(tables):
             conn.execute(f'ALTER VIEW "{table_name}" RENAME TO "{alias}"')
 
-    # Execute query and format output
+    if query.count(' ') == 0:
+        # this is a full-table extraction
+        query = f'SELECT * FROM "{query}"'
+
     result = conn.execute(query).fetchdf()
+
     if csv:
         print(result.to_csv(index=False))
     else:
         print(result.to_json(orient="records"))
+
     conn.close()
 
 
