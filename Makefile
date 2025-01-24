@@ -8,35 +8,35 @@ help:
 	@echo "  make lint      - Lint using rye"
 	@echo "  make typecheck - Typecheck with pyright"
 	@echo "  make test      - Run lint, typecheck, and unittest sequentially"
+	@echo "  make clean     - Remove .venv"
 
 # Check if .venv exists and is up to date
-.venv: pyproject.toml
+.venv: pyproject.toml uv.lock
 	@echo "==> Installing packages"
-	@rye sync
+	@uv sync
 
 # Run unittests with pytest
 unittest: .venv
 	@echo "==> Running unit tests"
-	@rye test -- --sw
+	@PYTHONPATH=src uv run pytest --sw
 
-# Reformat using rye
+# Reformat using ruff
 format: .venv
 	@echo "==> Formatting all files"
-	@rye format
-	@rye lint --fix
+	@uv run ruff format
 
-# Lint using rye
+# Lint using ruff
 lint: .venv
 	@echo "==> Linting all files"
-	@rye lint
+	@uv run ruff check
 
 # Typecheck with pyright
 typecheck: .venv
 	@echo "==> Typechecking"
-	@rye run pyright
+	@uv run pyright
 
 # Run lint, typecheck, and unittest sequentially
 test: lint typecheck unittest
 
 clean:
-	rm -rf data/* metadata/*
+	rm -rf .venv
