@@ -21,3 +21,6 @@ shelf = "shelf:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/shelf"]
+
+[tool.uv]
+package = true
