@@ -135,7 +135,7 @@ def main():
     db_parser.add_argument(
         "--names",
         action="store",
-        default='both',
+        default="both",
         help="What kind of names to use for tables (short|full|[both])",
     )
     db_parser.add_argument(
@@ -362,7 +362,10 @@ def new_table(
 
 
 def execute_query(
-    shelf: Shelf, query: str, names: Literal['short', 'full', 'both'] = 'both', csv: bool = False
+    shelf: Shelf,
+    query: str,
+    names: Literal["short", "full", "both"] = "both",
+    csv: bool = False,
 ) -> None:
     tables = _get_tables(shelf)
 
@@ -375,15 +378,15 @@ def execute_query(
             f"CREATE VIEW {table_name} AS SELECT * FROM read_parquet('{table_path}')"
         )
 
-    if names == 'both':
+    if names == "both":
         for alias, table_name in _table_aliases(tables):
             conn.execute(f'CREATE VIEW "{alias}" AS SELECT * FROM "{table_name}"')
 
-    elif names == 'short':
+    elif names == "short":
         for alias, table_name in _table_aliases(tables):
             conn.execute(f'ALTER VIEW "{table_name}" RENAME TO "{alias}"')
 
-    if query.count(' ') == 0:
+    if query.count(" ") == 0:
         # this is a full-table extraction
         query = f'SELECT * FROM "{query}"'
 
@@ -397,8 +400,8 @@ def execute_query(
     conn.close()
 
 
-def duckdb_shell(shelf: Shelf, names: str = 'both') -> None:
-    if names not in ('both', 'short', 'full'):
+def duckdb_shell(shelf: Shelf, names: str = "both") -> None:
+    if names not in ("both", "short", "full"):
         raise ValueError("Names parameter must be one of 'short', 'full' or 'both'")
 
     tables = _get_tables(shelf)
@@ -412,13 +415,11 @@ def duckdb_shell(shelf: Shelf, names: str = 'both') -> None:
             f"CREATE OR REPLACE VIEW {table_name} AS\nSELECT * FROM read_parquet('{table_path}');"
         )
 
-    if names != 'full':
+    if names != "full":
         for alias, table_name in _table_aliases(tables):
-            if names == 'short':
-                sql_parts.append(
-                    f'ALTER VIEW "{table_name}" RENAME TO "{alias}";'
-                )
-            elif names == 'both':
+            if names == "short":
+                sql_parts.append(f'ALTER VIEW "{table_name}" RENAME TO "{alias}";')
+            elif names == "both":
                 sql_parts.append(
                     f'CREATE OR REPLACE VIEW "{alias}" AS\nSELECT * FROM {table_name};'
                 )
